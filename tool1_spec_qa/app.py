@@ -274,7 +274,8 @@ Rules:
 - Bullet points (•) in the excerpts are table rows extracted from the specification. Read every bullet.
 - When a sentence ends with "the following set points:" or "the following levels:", the bullets immediately after are the answer.
 - Each excerpt starts with [DOC REV — SECTION]. Use that as the citation in your answer.
-- If the answer is not in the excerpts, say "Not found in the provided specifications." Do not guess.
+- If a question asks about a quantity (temperature, pressure, distance, time), a numeric value with a unit (e.g. 135°F, 20% LEL, 10 ppm) IS the answer — report it directly.
+- If the answer is genuinely not in the excerpts, say "Not found in the provided specifications." Do not guess.
 - Be direct. List set points or thresholds as bullet points.
 
 SPECIFICATION EXCERPTS (most relevant first):

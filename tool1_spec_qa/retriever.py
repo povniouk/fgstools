@@ -37,6 +37,8 @@ _SYNONYMS = {
     "ammonia":     "nh3",
     "lel":         "lower explosive limit flammable",
     "flammable":   "lel explosive gas",
+    "temperature": "thermal heat degree fahrenheit celsius",
+    "temp":        "temperature thermal heat",
     "detector":    "sensor transmitter detection",
     "detectors":   "sensors transmitters detection",
     "sensor":      "detector transmitter",
