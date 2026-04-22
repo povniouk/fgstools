@@ -258,8 +258,8 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] App files deployed to `fgstools` and in sync with dev VM
 - [x] Tool 1 (Spec Q&A) complete and running at `http://192.168.8.117:5000`
 - [x] GitHub repo initialised (`fgstools`), SSH key set up, initial commit pushed
-- [ ] Convert app to systemd service on `fgstools` LXC
-- [ ] Dashboard rebuild — multi-tab architecture
+- [x] Convert app to systemd service on `fgstools` LXC (`/etc/systemd/system/fgstools.service`, enabled, starts on boot)
+- [x] Dashboard rebuild — multi-tab architecture (Overview, Spec Q&A, Email Tracker, SPI Checker, C&E Checker, Admin)
 - [ ] Tool 5 (Email Tracker) — next to build
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
