@@ -131,6 +131,7 @@ def refresh_cache():
                     "text": chunk["text"],
                     "section": chunk.get("section", ""),
                     "page": chunk.get("page", 0),
+                    "has_table": chunk.get("has_table", False),
                     "source": fname,
                     "doc_number": doc_number,
                     "title": title,
