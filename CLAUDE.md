@@ -132,7 +132,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 | Challenge | Status | Notes |
 |-----------|--------|-------|
-| PDF table extraction | ✅ Addressed | pdfplumber `find_tables()` + inline Markdown injection. Sufficient for digital PDFs. For scanned/image PDFs, would need vision model (not anticipated for CWLNG specs). |
+| PDF table extraction | ✅ Addressed | pdfplumber `find_tables()` + inline bullet-point injection. Tables rendered as `• cell — cell` (NOT Markdown pipes — small LLMs misparse pipe tables). |
 | Table atomicity | ✅ Fixed | Tables are now atomic chunks; each carries the 4 preceding prose lines as context prefix. |
 | Word-count chunking splits context | ⚠️ Partial | Tables are safe. Prose chunks are still word-count based. Future: semantic chunking (split at sentence/paragraph boundaries). |
 | Vocabulary mismatch (synonyms) | ⚠️ Partial | BM25+TF-IDF hybrid + hand-coded synonym dict + fuzzy acronym fallback. Works for known terms. Breaks on new vocabulary. Long-term fix: embeddings. |
