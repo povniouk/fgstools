@@ -12,6 +12,9 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 SPECS_DIR = os.environ.get("SPECS_DIR", "specs")
 _EMBED_MODEL = "nomic-embed-text"
 
+# App sets this to log_info so embedding progress appears in the browser log panel
+_log = print
+
 # Synonym expansion — still useful for BM25 exact-term bridging.
 # Embeddings now handle semantic similarity; this covers acronyms/abbreviations.
 _SYNONYMS = {
@@ -97,7 +100,7 @@ def _build_embedding_matrix(chunks, cache_key):
     cache_path = os.path.join(SPECS_DIR, f"_embeddings_{h}.npy")
 
     if os.path.exists(cache_path):
-        print(f"[retriever] Loading cached embeddings ({h})")
+        _log(f"[retriever] Loading cached embeddings ({h})")
         return np.load(cache_path)
 
     # Remove stale embedding caches
@@ -107,17 +110,17 @@ def _build_embedding_matrix(chunks, cache_key):
         except OSError:
             pass
 
-    print(f"[retriever] Building embedding index ({len(chunks)} chunks) — first time only...")
+    _log(f"[retriever] Building embedding index ({len(chunks)} chunks) — first time only...")
     embeddings = []
     for i, chunk in enumerate(chunks):
         emb = _get_embedding(chunk["text"])
         embeddings.append(emb)
         if (i + 1) % 10 == 0 or i == len(chunks) - 1:
-            print(f"[retriever] Embedded {i + 1}/{len(chunks)}")
+            _log(f"[retriever] Embedded {i + 1}/{len(chunks)}")
 
     matrix = np.stack(embeddings)
     np.save(cache_path, matrix)
-    print(f"[retriever] Embedding cache saved ({cache_path})")
+    _log(f"[retriever] Embedding cache saved ({cache_path})")
     return matrix
 
 
@@ -150,7 +153,7 @@ class SpecIndex:
             try:
                 self.embed_matrix = _build_embedding_matrix(chunks, cache_key)
             except Exception as e:
-                print(f"[retriever] Embeddings unavailable ({e}) — using BM25+TF-IDF only")
+                _log(f"[retriever] Embeddings unavailable ({e}) — using BM25+TF-IDF only")
                 self.embed_matrix = None
                 self.use_embeddings = False
 

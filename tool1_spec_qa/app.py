@@ -8,6 +8,7 @@ from collections import deque
 from flask import Flask, request, jsonify, send_from_directory, Response
 from pdf_loader import load_pdf_chunks
 from retriever import find_relevant_chunks
+import retriever as _retriever
 
 app = Flask(__name__, static_folder="static")
 
@@ -411,6 +412,7 @@ def preload_specs():
 
 if __name__ == "__main__":
     os.makedirs(SPECS_DIR, exist_ok=True)
+    _retriever._log = log_info  # route embedding progress to browser log panel
     log_info(f"Starting F&G Spec Q&A — Ollama: {OLLAMA_URL} — Model: {MODEL}")
     preload_specs()
     log_info("App ready.")
