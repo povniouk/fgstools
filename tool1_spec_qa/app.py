@@ -258,7 +258,8 @@ def query():
     # Thinking mode benefits from more context to reason over
     top_k = TOP_K * 2 if current_model["think"] else TOP_K
     relevant = find_relevant_chunks(question, _combined_chunks, _cache_key, top_k=top_k)
-    log_info(f"Retrieved {len(relevant)} relevant chunks from {len(_specs_cache)} spec(s)")
+    sections = ", ".join(f"{c['section']}{'[T]' if c.get('has_table') else ''}" for c in relevant)
+    log_info(f"Retrieved {len(relevant)} chunks: {sections}")
 
     context = "\n\n".join(
         f"[Doc: {c['doc_number']} Rev.{c['revision']} | Section: {c['section']}]\n{c['text']}"

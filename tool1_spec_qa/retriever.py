@@ -51,6 +51,16 @@ _SYNONYMS = {
 
 _ACRONYM_RE = re.compile(r'^[a-z0-9]{2,5}$')
 
+# Common English stopwords and question framing words — excluded from keyword fallback
+_STOPWORDS = {
+    "what", "are", "the", "is", "for", "to", "of", "in", "a", "an", "and",
+    "or", "with", "on", "at", "by", "from", "this", "that", "these", "those",
+    "associated", "regarding", "concerning", "related", "about", "how", "when",
+    "where", "which", "who", "does", "do", "be", "been", "being", "have",
+    "has", "had", "can", "could", "will", "would", "should", "shall", "may",
+    "might", "its", "their", "any", "all", "each", "per", "as", "if",
+}
+
 
 def _acronym_variants(term):
     variants = {term}
@@ -194,17 +204,23 @@ class SpecIndex:
         # Table chunks are atomic and high-value — boost their score
         for i, chunk in enumerate(self.chunks):
             if chunk.get("has_table"):
-                combined[i] *= 1.4
+                combined[i] *= 2.0
 
         top_indices = set(int(i) for i in np.argsort(combined)[::-1][:top_k])
 
-        # Fuzzy keyword fallback — catches acronym variants missed by all methods
-        key_terms = [w.strip("?.,;:()").lower() for w in question.split() if len(w) > 1]
+        # Content key terms — strip stopwords and question framing words
+        key_terms = [
+            w.strip("?.,;:()").lower() for w in question.split()
+            if len(w) > 2 and w.strip("?.,;:()").lower() not in _STOPWORDS
+        ]
+
+        # Fuzzy keyword fallback — any chunk (especially table chunks) containing
+        # all content key terms gets force-included regardless of ranking score
         for i, chunk in enumerate(self.chunks):
             if i in top_indices:
                 continue
             text_lower = chunk["text"].lower()
-            if all(
+            if key_terms and all(
                 any(v in text_lower for v in (_acronym_variants(t) if _ACRONYM_RE.match(t) else {t}))
                 for t in key_terms
             ):
@@ -217,7 +233,7 @@ class SpecIndex:
 spec_index = SpecIndex()
 
 
-def find_relevant_chunks(question, chunks, cache_key, top_k=8):
+def find_relevant_chunks(question, chunks, cache_key, top_k=10):
     if spec_index.cache_key != cache_key:
         spec_index.build(chunks, cache_key)
     return spec_index.query(question, top_k=top_k)
