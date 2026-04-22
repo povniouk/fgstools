@@ -8,6 +8,9 @@ Greenfield LNG facility EPC project. The owner of this repo is a **control syste
 
 The goal of this project is to build AI-assisted tools that automate verification, cross-checking, and consistency work that is currently done manually across large documents and datasets.
 
+**GitHub repo:** `https://github.com/povniouk/fgstools` (private)
+**SSH key for GitHub:** `~/.ssh/github_fgstools` (ed25519, on dev VM 192.168.8.229)
+
 ---
 
 ## Domain Knowledge
@@ -19,6 +22,7 @@ The goal of this project is to build AI-assisted tools that automate verificatio
 
 ### Key Interfaces
 - **HSED** → provides governing specs and FGS layouts; defines interfaces with PA/GA, HVAC, FACP
+  - HSED is split across **HOC** (Houston Operating Center) and **BoOC** (Bogota Operational Center)
 - **PA/GA** — Public Address / General Alarm system
 - **HVAC** — interfaces triggered by F&G detection events
 - **FACP** — Fire Alarm Control Panel (building level), sends confirmed fire signal to FGS controller
@@ -27,6 +31,9 @@ The goal of this project is to build AI-assisted tools that automate verificatio
 ### Typical Logic Chain (example)
 Confirmed fire in building → FACP sends signal to FGS controller → FGS enables PA/GA activation
 Every link in this chain must be traceable to a spec clause.
+
+### SPI Data Limitation (important context)
+SPI exports are currently incomplete — data from HSED HOC and HSED BoOC is not yet fully reflected. Do not treat the SPI as a complete source of truth until this is resolved. The email tracker tool is being prioritised first for this reason.
 
 ---
 
@@ -61,6 +68,27 @@ Every link in this chain must be traceable to a spec clause.
 
 ---
 
+## Target Architecture — Integrated Dashboard
+
+All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) with a tabbed dashboard as the home page. Each tool is a Python module. One shared SQLite database (`cwlng.db`) for all structured data.
+
+**Dashboard tabs (planned):**
+
+| Tab | Status | Notes |
+|-----|--------|-------|
+| Overview | Planned | KPIs: open actions, pending reviews, last SPI import date |
+| Spec Q&A | Complete (Tool 1) | Current standalone app, to be integrated |
+| Email Tracker | Next to build | Deliverable tracking from forwarded emails |
+| SPI Checker | Planned (Tool 2) | Waiting for complete SPI data |
+| C&E Checker | Planned (Tool 3) | Waiting for first C&E draft |
+
+**Operational requirements (non-negotiable):**
+- App must run as a **systemd service** — starts on boot, restarts on crash, no terminal needed for day-to-day operation
+- Admin tab in the dashboard for: restart, view logs, trigger update
+- User never needs SSH or terminal for normal use — browser only
+
+---
+
 ## Tools to Build
 
 ### Tool 1 — Spec Q&A (`spec-qa`) — COMPLETE v1
@@ -79,27 +107,52 @@ Every link in this chain must be traceable to a spec clause.
 - PDF upload via drag & drop on Manage Specs page
 - PDFs auto-loaded from `~/spec-qa/specs/` on startup
 - Model selector in header (queries Ollama for available models)
-- Thinking toggle in header (off by default for speed)
+- Thinking toggle in header (off by default for speed; status bar shows `Thinking... N chars, Xs` when on)
 - TF-IDF index (scikit-learn) for fast relevant chunk retrieval
 - Real-time log panel (bottom bar, collapsible, SSE stream) with response time
 - Markdown rendering in answer box (marked.js bundled locally — no CDN)
 - VS Code dark theme
 - **Streaming responses** — backend uses Ollama stream mode + SSE; frontend renders tokens as they arrive (first-token latency shown to user)
-- **Generation tuning** — temperature `0.2` (factual), `num_predict` 1024 (output cap), `top_k` 4 (chunks sent)
+- **Generation tuning** — temperature `0.2`, `repeat_penalty 1.5`, `repeat_last_n 512`, `top_p 0.9`, `num_predict` 1024 (×4 when thinking on)
 - **Memory-cached specs** — chunks + metadata cached in process memory keyed by file mtime; disk re-read only when a spec file changes
 - **TF-IDF index** rebuilt only when the cache key (set of file mtimes) changes — not per query
+- **Cross-page chunking** — PDF chunks span page boundaries (700 words / 150 overlap) to avoid mid-sentence cuts
+- **Thinking mode** — `TOP_K` doubled when thinking is on; thinking status shown in status bar (not streamed to answer box)
+- **Loop guard** — server-side repetition detector aborts stream if a 20-char snippet repeats 4+ times in prior 500 chars; `MAX_THINK_CHARS=6000` cap on thinking tokens
 
-**Tunables (env vars):** `OLLAMA_URL`, `OLLAMA_MODEL`, `SPECS_DIR`, `TOP_K`, `TEMPERATURE`, `NUM_PREDICT`, `MAX_THINK_CHARS`
+**Tunables (env vars):** `OLLAMA_URL`, `OLLAMA_MODEL`, `SPECS_DIR`, `TOP_K` (default 8), `TEMPERATURE`, `NUM_PREDICT`, `MAX_THINK_CHARS`
 
 **Known issues to revisit:**
-- `gemma4:26b` with thinking enabled occasionally degenerates into repetition loops (e.g. `000-000-000-000...` when generating doc codes). Mitigations in place: `repeat_penalty: 1.5`, `repeat_last_n: 512`, `top_p: 0.9`, server-side loop detector that aborts the stream, `MAX_THINK_CHARS=6000` cap, doubled `TOP_K` in thinking mode, prompt rule against inventing doc codes. Root cause is likely sampling instability from the 22% CPU spill (26B doesn't fit in 16GB VRAM).
-- Next thing to try: pull `gemma4:26b-nvfp4` (Blackwell-native FP4 — should fit fully in VRAM). Trade-off: loses vision/OCR (acceptable, pdfplumber handles text extraction).
-- The 12B `gemma4:latest` is stable for production use.
+- `gemma4:26b` with thinking enabled occasionally degenerates into repetition loops (e.g. `000-000-000-000...`). All mitigations above are in place but do not fully resolve it. Root cause: 22% CPU spill (26B doesn't fit in 16GB VRAM) causes sampler instability that thinking mode amplifies.
+- **Next thing to try:** pull `gemma4:26b-nvfp4` (Blackwell-native FP4 — should fit fully in VRAM, no CPU spill). Loses vision/OCR — acceptable since pdfplumber extracts text.
+- `gemma4:latest` (12B) is stable for production use.
 
 ---
 
-### Tool 2 — SPI Consistency Checker
-**Purpose:** Ingest weekly SPI Excel export, run rule-based checks derived from specs, output anomaly report.
+### Tool 5 — Email Tracker — NEXT TO BUILD
+**Purpose:** Track deliverables, action items, and blocking points received by email from other engineering teams (HSED HOC, HSED BoOC, Civil, Piping, Vendors, etc.).
+
+**Design decisions:**
+- User **forwards** project emails to a dedicated Gmail account (e.g. `cwlng-fgs@gmail.com`)
+- App polls Gmail via **IMAP** (Python `imaplib`) on a configurable interval
+- Ollama extracts structured items per email: discipline/sender, document references, action required, blocking point, deadline, category, suggested priority
+- User sees a **draft preview** (one card per extracted item) and **approves, edits, or discards** each — AI suggests, human confirms
+- Approved items land in `cwlng.db` (SQLite) as action register entries
+- Action register is filterable by discipline, category, status (Open / In Progress / Closed)
+- Status flipped manually by user as items resolve
+
+**Why Gmail forwarding instead of direct company mailbox:** Company mailbox has no API access and admin restrictions. Gmail IMAP with an app password requires no OAuth, no admin rights, just a forward rule from the company inbox.
+
+**Why AI-suggested priority with human approval:** Avoids getting lost in history; user stays in control of what matters.
+
+**Categories:** Comment response, IFR submittal, Technical query, Information request, Meeting action, Blocking point
+
+---
+
+### Tool 2 — SPI Consistency Checker — PLANNED
+**Purpose:** Ingest weekly SPI Excel export, run rule-based checks derived from specs, output anomaly report. Store each weekly import in SQLite with timestamp; diff against prior week to surface new issues, resolved issues, and changed fields.
+
+**Note:** Deprioritised until SPI data from HSED HOC and BoOC is complete.
 
 **Example checks:**
 - Detector type matches spec requirement for the declared Fire Zone
@@ -108,11 +161,11 @@ Every link in this chain must be traceable to a spec clause.
 - No duplicate tag numbers
 
 **Input:** SPI Excel export (~2500 rows)
-**Output:** Report listing anomalies with tag reference and rule violated
+**Output:** Delta report (new/changed/resolved) + full anomaly list with tag reference and rule violated
 
 ---
 
-### Tool 3 — C&E vs Spec Checker
+### Tool 3 — C&E vs Spec Checker — PLANNED
 **Purpose:** Read C&E Excel matrix and verify cause-action pairs are consistent with spec requirements.
 
 **Example checks:**
@@ -123,10 +176,17 @@ Every link in this chain must be traceable to a spec clause.
 
 ---
 
-### Tool 4 — Revision Delta Tracker
-**Purpose:** Compare two revisions of a spec PDF, output list of changed clauses, flag which Tool 2 rules or Tool 3 checks are potentially invalidated.
+### Tool 4 — Revision Delta Tracker — PLANNED
+**Purpose:** Compare two revisions of a spec PDF, output list of changed clauses, flag which Tool 2 rules or Tool 3 checks are potentially invalidated. Triggered automatically when a new spec is uploaded.
 
 **Input:** Two PDF revisions of the same spec document
+
+---
+
+### Additional tools considered (brainstorm, not yet scoped)
+- **Document submittal register** — track IFR / IFC / IFA status per document, highlight overdue items
+- **Meeting minutes action extractor** — paste or forward meeting minutes, AI extracts action items with owners and deadlines
+- **Overview / KPI dashboard** — open actions count, pending reviews, last SPI import, spec revision alerts
 
 ---
 
@@ -135,6 +195,7 @@ Every link in this chain must be traceable to a spec clause.
 ### Developer Machine
 - VM at `192.168.8.229` — dev environment, VS Code, Claude Code
 - Company laptop has no admin rights — accesses all tools via browser only
+- Git repo at `/home/povniouk/my-projects/CWLNG/`
 
 ### Proxmox Server
 - Hardware: AMD Ryzen 9 5950X, 64GB RAM, RTX 5060 Ti 16GB VRAM
@@ -156,8 +217,10 @@ Every link in this chain must be traceable to a spec clause.
 - OS: Debian 13 (headless, SSH only)
 - Hosts all web application tools
 - Calls Ollama on `gemma4` at `http://192.168.8.200:11434`
-- App folder: `~/spec-qa/`
+- App folder: `~/spec-qa/` (will be reorganised to `~/fgstools/` when dashboard rebuild begins)
 - Spec PDFs stored in `~/spec-qa/specs/`
+- SQLite database will live here: `~/fgstools/cwlng.db`
+- **App must run as systemd service** — not manually from terminal
 
 ### Why local AI instead of cloud API
 Spec PDFs and project data are confidential EPC deliverables. Sending them to any external API is a security and contractual risk. All AI inference runs locally on the Proxmox server.
@@ -173,10 +236,13 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 
 - **Backend:** Python + Flask
 - **AI runtime:** Ollama on `gemma4` VM — model: `gemma4:latest`
-- **Frontend:** Simple HTML/JS, no framework
+- **Frontend:** Simple HTML/JS, no framework, no external CDNs (company browser blocks them — always bundle locally)
 - **Document parsing:** pdfplumber
-- **Data handling:** pandas (for future Excel tools)
-- **Deployment:** LXC `fgstools`, accessed via browser from laptop
+- **Data storage:** SQLite (`cwlng.db`) — shared across all tools
+- **Email polling:** Python `imaplib` against a dedicated Gmail account
+- **Data handling:** pandas (for Excel tools)
+- **Deployment:** LXC `fgstools`, accessed via browser from laptop; systemd service for auto-start
+- **Source control:** GitHub `https://github.com/povniouk/fgstools` (private)
 
 ---
 
@@ -191,6 +257,10 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] Python venv created in `~/spec-qa/`, dependencies installed
 - [x] App files deployed to `fgstools` and in sync with dev VM
 - [x] Tool 1 (Spec Q&A) complete and running at `http://192.168.8.117:5000`
-- [ ] Tool 2 (SPI Consistency Checker) — not started
+- [x] GitHub repo initialised (`fgstools`), SSH key set up, initial commit pushed
+- [ ] Convert app to systemd service on `fgstools` LXC
+- [ ] Dashboard rebuild — multi-tab architecture
+- [ ] Tool 5 (Email Tracker) — next to build
+- [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
 - [ ] Tool 4 (Revision Delta Tracker) — not started
