@@ -234,7 +234,8 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - QEMU args: `-cpu host,kvm=off`
 - AI runtime: **Ollama**, default model **`gemma4:latest`** (12B, fits 100% in VRAM); `gemma4:26b` available but spills to CPU (22% CPU / 78% GPU)
 - Ollama listens on `0.0.0.0:11434`, env: `OLLAMA_KEEP_ALIVE=24h` (model stays warm in VRAM)
-- **Dedicated to AI inference only — no app code runs here**
+- **Reranker service (pending install):** `BAAI/bge-reranker-base` via sentence-transformers, port `11435`. Service file at `reranker/reranker.service` in repo. Install: create `~/reranker/`, venv, `pip install flask sentence-transformers`, copy `reranker/app.py`, enable systemd service.
+- Models pulled: `gemma4:latest`, `gemma4:26b`, `nomic-embed-text:latest`
 
 **Quantization notes:**
 - For Blackwell GPUs (RTX 50 series), `*-nvfp4` variants leverage native FP4 tensor cores — smaller, faster, higher quality than INT4 quants. Worth trying for any model that doesn't fit at default quant.
@@ -287,6 +288,8 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] GitHub repo initialised (`fgstools`), SSH key set up, initial commit pushed
 - [x] Convert app to systemd service on `fgstools` LXC (`/etc/systemd/system/fgstools.service`, enabled, starts on boot)
 - [x] Dashboard rebuild — multi-tab architecture (Overview, Spec Q&A, Email Tracker, SPI Checker, C&E Checker, Admin)
+- [ ] Reranker service on gemma4 VM — files ready in `reranker/`, install instructions in session notes below
+- [ ] Wire fgstools retriever to call reranker at http://192.168.8.200:11435/rerank
 - [ ] Tool 5 (Email Tracker) — next to build
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft

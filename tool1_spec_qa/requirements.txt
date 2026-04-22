@@ -4,3 +4,4 @@ requests
 scikit-learn
 numpy
 rank-bm25
+sentence-transformers

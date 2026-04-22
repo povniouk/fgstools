@@ -268,8 +268,48 @@ class SpecIndex:
 
 spec_index = SpecIndex()
 
+# --- Re-ranker ---
+# CrossEncoder re-scores (question, chunk) pairs after first-pass retrieval.
+# Much more accurate than vector similarity because it reads both together.
+_reranker = None
+_reranker_available = True
 
-def find_relevant_chunks(question, chunks, cache_key, top_k=10):
+def _load_reranker():
+    global _reranker, _reranker_available
+    if not _reranker_available:
+        return None
+    if _reranker is not None:
+        return _reranker
+    try:
+        from sentence_transformers import CrossEncoder
+        _log("Loading re-ranker (BAAI/bge-reranker-base) — first time downloads ~270MB...")
+        _reranker = CrossEncoder("BAAI/bge-reranker-base", max_length=512)
+        _log("Re-ranker ready.")
+    except Exception as e:
+        _log(f"Re-ranker unavailable ({e}) — using retrieval order only.")
+        _reranker_available = False
+    return _reranker
+
+
+def _rerank(question, candidates, top_n=5):
+    """Re-score candidates with cross-encoder and return top_n."""
+    reranker = _load_reranker()
+    if reranker is None or not candidates:
+        return candidates[:top_n]
+    try:
+        pairs = [(question, c["text"][:512]) for c in candidates]
+        scores = reranker.predict(pairs)
+        ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
+        return [c for _, c in ranked[:top_n]]
+    except Exception as e:
+        _log(f"Re-ranking failed ({e}) — using retrieval order.")
+        return candidates[:top_n]
+
+
+def find_relevant_chunks(question, chunks, cache_key, top_k=6):
     if spec_index.cache_key != cache_key:
         spec_index.build(chunks, cache_key)
-    return spec_index.query(question, top_k=top_k)
+    # First pass: cast wide net with BM25+TF-IDF+embeddings
+    candidates = spec_index.query(question, top_k=top_k)
+    # Second pass: re-rank with cross-encoder, return top 5
+    return _rerank(question, candidates, top_n=5)
