@@ -223,15 +223,25 @@ class SpecIndex:
         # Table chunks are atomic/authoritative: include if ANY key term matches.
         # Prose chunks: require ALL key terms (stricter, avoids noise).
         def term_in(t, text):
+            """Check t OR any of its synonyms against text."""
             variants = _acronym_variants(t) if _ACRONYM_RE.match(t) else {t}
-            return any(v in text for v in variants)
+            if any(v in text for v in variants):
+                return True
+            # Also check synonyms of t
+            for syn in _SYNONYMS.get(t, "").split():
+                if syn in text:
+                    return True
+            return False
 
         for i, chunk in enumerate(self.chunks):
             if i in top_indices:
                 continue
             text_lower = chunk["text"].lower()
             if chunk.get("has_table"):
-                if key_terms and any(term_in(t, text_lower) for t in key_terms):
+                # Table chunks: force-include if at least 2 raw terms match
+                # (prevents single generic word like "gas" from matching everything)
+                match_count = sum(1 for t in raw_terms if term_in(t, text_lower))
+                if match_count >= 2:
                     top_indices.add(i)
             else:
                 if raw_terms and all(term_in(t, text_lower) for t in key_terms):
