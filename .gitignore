@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Spec documents — confidential EPC deliverables, never commit
+*.pdf
+*.chunks.json
+
+# Database — contains project data, manage separately
+*.db
+*.sqlite
+
+# Environment / secrets
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Editor
+.vscode/settings.json
+*.swp

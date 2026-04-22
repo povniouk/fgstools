@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>F&G Spec Q&A</title>
+  <script src="/static/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #cccccc; min-height: 100vh; }
+
+    /* Header */
+    header { background: #252526; padding: 0 32px; border-bottom: 1px solid #007acc; display: flex; align-items: stretch; justify-content: space-between; gap: 16px; }
+    .header-left { display: flex; align-items: center; padding: 12px 0; }
+    header h1 { font-size: 1.2rem; color: #cccccc; font-weight: 400; }
+    header p { font-size: 0.75rem; color: #858585; margin-top: 2px; }
+
+    /* Nav tabs */
+    nav { display: flex; align-items: stretch; gap: 0; }
+    .nav-tab { padding: 0 20px; display: flex; align-items: center; font-size: 0.85rem; color: #858585; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s; user-select: none; }
+    .nav-tab:hover { color: #cccccc; }
+    .nav-tab.active { color: #cccccc; border-bottom-color: #007acc; }
+
+    /* Model selector */
+    .model-selector { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 12px 0; }
+    .model-selector label { font-size: 0.78rem; color: #858585; white-space: nowrap; }
+    .model-selector select { background: #3c3c3c; border: 1px solid #3c3c3c; border-radius: 2px; padding: 5px 10px; color: #cccccc; font-size: 0.85rem; cursor: pointer; }
+    .model-selector select:focus { outline: none; border-color: #007acc; }
+    .model-active { font-size: 0.72rem; color: #4ec9b0; white-space: nowrap; }
+    .think-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #858585; flex-shrink: 0; }
+    .think-toggle input[type="checkbox"] { accent-color: #007acc; width: 13px; height: 13px; cursor: pointer; }
+    .think-toggle label { cursor: pointer; white-space: nowrap; }
+
+    /* Pages */
+    .page { display: none; }
+    .page.active { display: block; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 28px 16px; }
+
+    .section { background: #252526; border: 1px solid #3c3c3c; border-radius: 4px; padding: 20px; margin-bottom: 20px; }
+    .section h2 { font-size: 0.75rem; text-transform: uppercase; color: #858585; letter-spacing: 1px; margin-bottom: 14px; font-weight: 600; }
+
+    /* Spec table */
+    .spec-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .spec-table th { text-align: left; padding: 8px 10px; color: #858585; font-weight: 600; border-bottom: 1px solid #3c3c3c; white-space: nowrap; }
+    .spec-table td { padding: 8px 10px; border-bottom: 1px solid #2d2d2d; vertical-align: middle; }
+    .spec-table tr:last-child td { border-bottom: none; }
+    .spec-table tr:hover td { background: #2a2d2e; }
+    .spec-table input[type="text"] { background: #3c3c3c; border: 1px solid #3c3c3c; border-radius: 2px; padding: 4px 8px; color: #cccccc; font-size: 0.82rem; width: 100%; }
+    .spec-table input[type="text"]:focus { outline: none; border-color: #007acc; }
+    .btn-save { background: #37373d; border: 1px solid #3c3c3c; border-radius: 2px; padding: 4px 10px; color: #cccccc; cursor: pointer; font-size: 0.78rem; white-space: nowrap; }
+    .btn-save:hover { background: #007acc; border-color: #007acc; color: #fff; }
+    .empty-row { color: #555; font-style: italic; font-size: 0.85rem; padding: 12px 10px; }
+
+    /* Upload */
+    #dropZone { border: 1px dashed #3c3c3c; border-radius: 4px; padding: 36px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+    #dropZone:hover { border-color: #007acc; }
+
+    button { background: #007acc; border: none; border-radius: 2px; padding: 8px 18px; color: white; cursor: pointer; font-size: 0.9rem; white-space: nowrap; }
+    button:hover { background: #0062a3; }
+    button:disabled { background: #37373d; color: #555; cursor: not-allowed; }
+
+    textarea { width: 100%; background: #3c3c3c; border: 1px solid #3c3c3c; border-radius: 2px; padding: 10px 12px; color: #cccccc; font-size: 0.95rem; resize: vertical; min-height: 80px; }
+    textarea:focus { outline: none; border-color: #007acc; }
+
+    .answer-box { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 2px; padding: 16px; line-height: 1.6; font-size: 0.95rem; min-height: 60px; color: #d4d4d4; }
+    .answer-box.empty { color: #555; font-style: italic; }
+    .answer-box h1,.answer-box h2,.answer-box h3 { color: #cccccc; margin: 12px 0 6px; font-weight: 600; }
+    .answer-box h1 { font-size: 1.1rem; }
+    .answer-box h2 { font-size: 1rem; }
+    .answer-box h3 { font-size: 0.95rem; color: #9cdcfe; }
+    .answer-box p { margin-bottom: 8px; }
+    .answer-box ul,.answer-box ol { margin: 6px 0 8px 20px; }
+    .answer-box li { margin-bottom: 3px; }
+    .answer-box strong { color: #cccccc; }
+    .answer-box code { background: #2d2d2d; border-radius: 2px; padding: 1px 5px; font-family: 'Consolas', monospace; font-size: 0.88rem; color: #ce9178; }
+    .answer-box pre { background: #2d2d2d; border-radius: 3px; padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
+    .answer-box pre code { background: none; padding: 0; color: #d4d4d4; }
+    .answer-box table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 0.88rem; }
+    .answer-box th { background: #2d2d2d; padding: 6px 10px; text-align: left; color: #9cdcfe; border: 1px solid #3c3c3c; }
+    .answer-box td { padding: 5px 10px; border: 1px solid #3c3c3c; }
+    .answer-box tr:nth-child(even) td { background: #252526; }
+    .answer-box blockquote { border-left: 3px solid #007acc; margin: 8px 0; padding: 4px 12px; color: #858585; }
+
+    .sources { margin-top: 12px; }
+    .sources-label { font-size: 0.72rem; color: #858585; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .source-tag { display: inline-block; background: #37373d; border: 1px solid #3c3c3c; padding: 3px 10px; border-radius: 2px; font-size: 0.75rem; color: #858585; margin: 3px 4px 3px 0; }
+    .source-tag strong { color: #9cdcfe; }
+
+    .status { font-size: 0.8rem; color: #858585; margin-top: 8px; min-height: 18px; }
+    .status.error { color: #f44747; }
+    .status.ok { color: #4ec9b0; }
+
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #3c3c3c; border-top-color: #007acc; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Log panel */
+    #logPanel { position: fixed; bottom: 0; left: 0; right: 0; background: #1e1e1e; border-top: 1px solid #3c3c3c; z-index: 100; display: flex; flex-direction: column; transition: height 0.2s; }
+    #logPanel.collapsed { height: 28px; }
+    #logPanel.expanded { height: 220px; }
+    #logBar { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 28px; background: #252526; border-bottom: 1px solid #3c3c3c; cursor: pointer; user-select: none; flex-shrink: 0; }
+    #logBar span { font-size: 0.72rem; color: #858585; text-transform: uppercase; letter-spacing: 0.5px; }
+    #logBar .log-toggle { margin-left: auto; font-size: 0.72rem; color: #858585; }
+    #logBar .log-badge { background: #007acc; color: #fff; border-radius: 2px; padding: 0 5px; font-size: 0.68rem; }
+    #logContent { flex: 1; overflow-y: auto; padding: 6px 16px; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.78rem; line-height: 1.6; }
+    #logPanel.collapsed #logContent { display: none; }
+    .log-line { display: flex; gap: 10px; }
+    .log-ts { color: #555; flex-shrink: 0; }
+    .log-info  .log-msg { color: #cccccc; }
+    .log-warn  .log-msg { color: #dcdcaa; }
+    .log-error .log-msg { color: #f44747; }
+    body { padding-bottom: 28px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <div>
+        <h1>F&G Spec Q&A</h1>
+        <p>Fire &amp; Gas — Specification Query Tool</p>
+      </div>
+    </div>
+    <nav>
+      <div class="nav-tab active" onclick="showPage('qa')">Q&amp;A</div>
+      <div class="nav-tab" onclick="showPage('manage')">Manage Specs</div>
+    </nav>
+    <div class="model-selector">
+      <label for="modelSelect">Model</label>
+      <select id="modelSelect" onchange="selectModel(this.value)"></select>
+      <span class="model-active" id="modelActive"></span>
+    </div>
+    <div class="think-toggle">
+      <input type="checkbox" id="thinkCheck" onchange="setThink(this.checked)">
+      <label for="thinkCheck">Thinking</label>
+    </div>
+  </header>
+
+  <!-- Q&A Page -->
+  <div id="page-qa" class="page active">
+    <div class="container">
+
+      <div class="section">
+        <h2>Loaded Specifications</h2>
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>Document Number</th>
+              <th>Title</th>
+              <th>Revision</th>
+              <th>Revision Date</th>
+            </tr>
+          </thead>
+          <tbody id="specTableBody">
+            <tr><td colspan="4" class="empty-row">No specifications loaded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>Ask a Question</h2>
+        <textarea id="questionInput" placeholder="e.g. What is the required voting logic for confirmed gas detection in a compressor building?"></textarea>
+        <div style="margin-top: 10px;">
+          <button id="askBtn" onclick="askQuestion()">Ask</button>
+        </div>
+        <div class="status" id="queryStatus"></div>
+      </div>
+
+      <div class="section">
+        <h2>Answer</h2>
+        <div class="answer-box empty" id="answerBox">Answer will appear here.</div>
+        <div class="sources" id="sourcesBox"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Manage Specs Page -->
+  <div id="page-manage" class="page">
+    <div class="container">
+
+      <div class="section">
+        <h2>Upload Specification PDF</h2>
+        <div id="dropZone">
+          <div style="color:#858585;font-size:0.9rem;">Drag &amp; drop a PDF here, or click to select</div>
+          <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="uploadFile(this.files[0])">
+        </div>
+        <div class="status" id="loadStatus"></div>
+      </div>
+
+      <div class="section">
+        <h2>Specification Library</h2>
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>Document Number</th>
+              <th>Title</th>
+              <th>Revision</th>
+              <th>Revision Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="specTableBodyManage">
+            <tr><td colspan="5" class="empty-row">No specifications loaded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Log Panel -->
+  <div id="logPanel" class="collapsed">
+    <div id="logBar" onclick="toggleLog()">
+      <span>Output</span>
+      <span id="logBadge" class="log-badge" style="display:none">0</span>
+      <span class="log-toggle" id="logToggleLabel">▲ Show</span>
+    </div>
+    <div id="logContent"></div>
+  </div>
+
+  <script>
+    // --- Log panel ---
+    let logExpanded = false;
+    let unreadLogs = 0;
+
+    function toggleLog() {
+      logExpanded = !logExpanded;
+      const panel = document.getElementById("logPanel");
+      panel.className = logExpanded ? "expanded" : "collapsed";
+      document.getElementById("logToggleLabel").textContent = logExpanded ? "▼ Hide" : "▲ Show";
+      if (logExpanded) {
+        unreadLogs = 0;
+        document.getElementById("logBadge").style.display = "none";
+        scrollLog();
+      }
+      document.body.style.paddingBottom = logExpanded ? "220px" : "28px";
+    }
+
+    function scrollLog() {
+      const el = document.getElementById("logContent");
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function appendLog(entry) {
+      if (entry.level === "ping") return;
+      const el = document.getElementById("logContent");
+      const line = document.createElement("div");
+      line.className = `log-line log-${entry.level}`;
+      line.innerHTML = `<span class="log-ts">${entry.ts}</span><span class="log-msg">${entry.msg}</span>`;
+      el.appendChild(line);
+      if (logExpanded) {
+        scrollLog();
+      } else {
+        unreadLogs++;
+        const badge = document.getElementById("logBadge");
+        badge.textContent = unreadLogs > 99 ? "99+" : unreadLogs;
+        badge.style.display = "inline";
+      }
+    }
+
+    function startLogStream() {
+      const es = new EventSource("/api/logs/stream");
+      es.onmessage = e => {
+        try { appendLog(JSON.parse(e.data)); } catch {}
+      };
+      es.onerror = () => {
+        setTimeout(startLogStream, 3000);
+        es.close();
+      };
+    }
+
+    startLogStream();
+
+    // --- Navigation ---
+    function showPage(name) {
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+      document.getElementById("page-" + name).classList.add("active");
+      event.target.classList.add("active");
+      if (name === "manage") refreshSpecsManage();
+    }
+
+    // --- Model selector ---
+    async function refreshModels() {
+      const res = await fetch("/api/models");
+      const data = await res.json();
+      const select = document.getElementById("modelSelect");
+      select.innerHTML = data.models.map(m =>
+        `<option value="${m}" ${m === data.current ? "selected" : ""}>${m}</option>`
+      ).join("");
+      document.getElementById("modelActive").textContent = "active: " + data.current;
+      document.getElementById("thinkCheck").checked = data.think;
+    }
+
+    async function selectModel(name) {
+      const res = await fetch("/api/models/select", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({model: name})
+      });
+      const data = await res.json();
+      document.getElementById("modelActive").textContent = "active: " + data.current;
+    }
+
+    async function setThink(enabled) {
+      await fetch("/api/models/think", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({think: enabled})
+      });
+    }
+
+    // --- Drop zone ---
+    const dropZone = document.getElementById("dropZone");
+    dropZone.addEventListener("click", () => document.getElementById("fileInput").click());
+    dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.style.borderColor = "#007acc"; });
+    dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = "#3c3c3c"; });
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.style.borderColor = "#3c3c3c";
+      const file = e.dataTransfer.files[0];
+      if (file) uploadFile(file);
+    });
+
+    async function uploadFile(file) {
+      if (!file || !file.name.endsWith(".pdf")) {
+        setStatus("loadStatus", "error", "Only PDF files are accepted.");
+        return;
+      }
+      setStatus("loadStatus", "", '<span class="spinner"></span>Uploading and parsing ' + file.name + '...');
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.error) {
+          setStatus("loadStatus", "error", data.error);
+        } else {
+          setStatus("loadStatus", "ok", `Loaded: ${data.loaded} (${data.chunks} chunks)`);
+          refreshSpecsManage();
+          refreshSpecsQA();
+        }
+      } catch(e) {
+        setStatus("loadStatus", "error", "Connection error.");
+      }
+    }
+
+    // --- Spec table (Q&A page — read only) ---
+    async function refreshSpecsQA() {
+      const res = await fetch("/api/specs");
+      const data = await res.json();
+      const tbody = document.getElementById("specTableBody");
+      if (!data.specs || data.specs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-row">No specifications loaded.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.specs.map(s => `
+        <tr>
+          <td>${s.doc_number || "—"}</td>
+          <td>${s.title || "—"}</td>
+          <td>${s.revision || "—"}</td>
+          <td>${s.rev_date || "—"}</td>
+        </tr>
+      `).join("");
+    }
+
+    // --- Spec table (Manage page — editable) ---
+    async function refreshSpecsManage() {
+      const res = await fetch("/api/specs");
+      const data = await res.json();
+      const tbody = document.getElementById("specTableBodyManage");
+      if (!data.specs || data.specs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No specifications loaded.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.specs.map(s => `
+        <tr data-filename="${s.filename}">
+          <td><input type="text" value="${s.doc_number}" placeholder="Doc number" data-field="doc_number"></td>
+          <td><input type="text" value="${s.title}" placeholder="Title" data-field="title"></td>
+          <td><input type="text" value="${s.revision}" placeholder="Rev" style="max-width:60px" data-field="revision"></td>
+          <td><input type="text" value="${s.rev_date}" placeholder="e.g. 2025-03-15" data-field="rev_date"></td>
+          <td><button class="btn-save" onclick="saveMetadata('${s.filename}', this)">Save</button></td>
+        </tr>
+      `).join("");
+    }
+
+    async function saveMetadata(filename, btn) {
+      const row = btn.closest("tr");
+      const meta = {};
+      row.querySelectorAll("input[data-field]").forEach(inp => {
+        meta[inp.dataset.field] = inp.value.trim();
+      });
+      try {
+        const res = await fetch(`/api/specs/${encodeURIComponent(filename)}/metadata`, {
+          method: "PUT",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(meta)
+        });
+        const data = await res.json();
+        if (data.ok) {
+          btn.textContent = "Saved ✓";
+          refreshSpecsQA();
+          setTimeout(() => btn.textContent = "Save", 1500);
+        }
+      } catch(e) {
+        btn.textContent = "Error";
+      }
+    }
+
+    // --- Q&A (streaming) ---
+    function renderSources(sources) {
+      const sourcesBox = document.getElementById("sourcesBox");
+      const unique = [...new Map(sources.map(s => [s.doc_number + s.section, s])).values()];
+      sourcesBox.innerHTML = unique.length
+        ? `<div class="sources-label">Sources</div>` + unique.map(s =>
+            `<span class="source-tag"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section}</span>`
+          ).join("")
+        : "";
+    }
+
+    async function askQuestion() {
+      const question = document.getElementById("questionInput").value.trim();
+      if (!question) return;
+      const btn = document.getElementById("askBtn");
+      const answerBox = document.getElementById("answerBox");
+      const sourcesBox = document.getElementById("sourcesBox");
+
+      setStatus("queryStatus", "", '<span class="spinner"></span>Streaming response...');
+      btn.disabled = true;
+      answerBox.className = "answer-box empty";
+      answerBox.textContent = "Waiting for first token...";
+      sourcesBox.innerHTML = "";
+
+      let fullText = "";
+      let thinkText = "";
+      let firstToken = true;
+      let firstThink = true;
+      const tStart = performance.now();
+
+      try {
+        const res = await fetch("/api/query", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({question})
+        });
+
+        if (!res.ok || !res.body) {
+          setStatus("queryStatus", "error", "Stream error.");
+          answerBox.textContent = "";
+          btn.disabled = false;
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const {done, value} = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, {stream: true});
+          let parts = buffer.split("\n\n");
+          buffer = parts.pop();
+          for (const part of parts) {
+            const lines = part.split("\n");
+            let event = "message", data = "";
+            for (const ln of lines) {
+              if (ln.startsWith("event: ")) event = ln.slice(7).trim();
+              else if (ln.startsWith("data: ")) data += ln.slice(6);
+            }
+            if (!data) continue;
+            try {
+              const obj = JSON.parse(data);
+              if (event === "sources") {
+                renderSources(obj);
+              } else if (event === "thinking") {
+                if (firstThink) {
+                  firstThink = false;
+                }
+                thinkText += obj.t;
+                const sec = ((performance.now() - tStart) / 1000).toFixed(1);
+                setStatus("queryStatus", "", `<span class="spinner"></span>Thinking... ${thinkText.length} chars, ${sec}s`);
+              } else if (event === "token") {
+                if (firstToken) {
+                  const ms = Math.round(performance.now() - tStart);
+                  setStatus("queryStatus", "", `<span class="spinner"></span>Streaming (first token ${ms} ms)...`);
+                  answerBox.className = "answer-box";
+                  answerBox.innerHTML = "";
+                  firstToken = false;
+                }
+                fullText += obj.t;
+                answerBox.innerHTML = marked.parse(fullText);
+              } else if (event === "done") {
+                setStatus("queryStatus", "ok", `Done in ${obj.elapsed.toFixed(1)}s`);
+              } else if (event === "error") {
+                setStatus("queryStatus", "error", obj.error);
+              }
+            } catch {}
+          }
+        }
+      } catch(e) {
+        setStatus("queryStatus", "error", "Connection error.");
+        answerBox.textContent = "";
+      }
+      btn.disabled = false;
+    }
+
+    function setStatus(id, type, msg) {
+      const el = document.getElementById(id);
+      el.className = "status" + (type ? " " + type : "");
+      el.innerHTML = msg;
+    }
+
+    document.getElementById("questionInput").addEventListener("keydown", function(e) {
+      if (e.key === "Enter" && e.ctrlKey) askQuestion();
+    });
+
+    refreshSpecsQA();
+    refreshModels();
+  </script>
+</body>
+</html>
