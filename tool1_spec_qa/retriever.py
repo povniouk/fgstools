@@ -208,23 +208,34 @@ class SpecIndex:
 
         top_indices = set(int(i) for i in np.argsort(combined)[::-1][:top_k])
 
-        # Content key terms — strip stopwords and question framing words
-        key_terms = [
+        # Content key terms — strip stopwords; keep even 2-char terms (H2, CO, O2)
+        raw_terms = [
             w.strip("?.,;:()").lower() for w in question.split()
-            if len(w) > 2 and w.strip("?.,;:()").lower() not in _STOPWORDS
+            if len(w) >= 2 and w.strip("?.,;:()").lower() not in _STOPWORDS
         ]
+        # Expand through synonyms so "h2" also checks for "hydrogen"
+        key_terms = set(raw_terms)
+        for t in raw_terms:
+            if t in _SYNONYMS:
+                key_terms.update(_SYNONYMS[t].split())
 
-        # Fuzzy keyword fallback — any chunk (especially table chunks) containing
-        # all content key terms gets force-included regardless of ranking score
+        # Keyword fallback — different rules for table vs prose chunks:
+        # Table chunks are atomic/authoritative: include if ANY key term matches.
+        # Prose chunks: require ALL key terms (stricter, avoids noise).
+        def term_in(t, text):
+            variants = _acronym_variants(t) if _ACRONYM_RE.match(t) else {t}
+            return any(v in text for v in variants)
+
         for i, chunk in enumerate(self.chunks):
             if i in top_indices:
                 continue
             text_lower = chunk["text"].lower()
-            if key_terms and all(
-                any(v in text_lower for v in (_acronym_variants(t) if _ACRONYM_RE.match(t) else {t}))
-                for t in key_terms
-            ):
-                top_indices.add(i)
+            if chunk.get("has_table"):
+                if key_terms and any(term_in(t, text_lower) for t in key_terms):
+                    top_indices.add(i)
+            else:
+                if raw_terms and all(term_in(t, text_lower) for t in key_terms):
+                    top_indices.add(i)
 
         ordered = sorted(top_indices, key=lambda i: combined[i], reverse=True)
         return [self.chunks[i] for i in ordered]
