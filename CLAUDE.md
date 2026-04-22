@@ -126,6 +126,17 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - `gemma4:26b` with thinking enabled occasionally degenerates into repetition loops (e.g. `000-000-000-000...`). All mitigations above are in place but do not fully resolve it. Root cause: 22% CPU spill (26B doesn't fit in 16GB VRAM) causes sampler instability that thinking mode amplifies.
 - **Next thing to try:** pull `gemma4:26b-nvfp4` (Blackwell-native FP4 — should fit fully in VRAM, no CPU spill). Loses vision/OCR — acceptable since pdfplumber extracts text.
 - `gemma4:latest` (12B) is stable for production use.
+- Model sometimes says "not found" even when the answer is in the retrieved chunks, particularly for tabular data. Partial fix: prompt now includes a table-reading example. Root cause under investigation.
+
+**Retrieval — known limitations and backlog:**
+- **Current:** TF-IDF (scikit-learn) + hand-coded synonym expansion + keyword fallback. Works for exact terms but fails on semantic synonyms not in the dict.
+- **Problem:** TF-IDF is a keyword matcher — "thresholds" ≠ "set points" without explicit mapping. The synonym dict is a band-aid that requires manual maintenance.
+- **Next improvement (medium effort, one session):** Replace TF-IDF with **hybrid BM25 + local embeddings**:
+  - BM25 (`rank-bm25` library, no GPU) for exact technical terms (tag numbers, clause refs, part numbers)
+  - `nomic-embed-text` via Ollama (CPU, ~274MB) for semantic similarity
+  - Merge both score lists (Reciprocal Rank Fusion) before selecting top-K chunks
+  - This eliminates the synonym dict entirely and handles unseen vocabulary
+- **Chunking concern:** 700-word cross-page chunks may split table context from its heading. Tables are now extracted inline (pdfplumber `find_tables()` + crop), but chunk boundaries can still split a heading from its table if they land in different chunks. Potential fix: sentence-aware chunking that never splits mid-table.
 
 ---
 
