@@ -29,17 +29,16 @@ def strip_boilerplate(text):
     return "\n".join(ln for ln in lines if not _BOILERPLATE.search(ln))
 
 
-def table_to_markdown(rows):
+def table_to_bullets(rows):
+    """Convert a table to bullet points — more reliably parsed by small LLMs than pipe tables."""
     if not rows:
         return ""
     cleaned = [[str(c).strip() if c is not None else "" for c in row] for row in rows]
-    col_count = max(len(row) for row in cleaned)
-    padded = [row + [""] * (col_count - len(row)) for row in cleaned]
-    header = padded[0]
-    lines = ["| " + " | ".join(header) + " |"]
-    lines.append("| " + " | ".join(["---"] * col_count) + " |")
-    for row in padded[1:]:
-        lines.append("| " + " | ".join(row) + " |")
+    lines = []
+    for row in cleaned:
+        cells = [c for c in row if c]
+        if cells:
+            lines.append("• " + " — ".join(cells))
     return "\n".join(lines)
 
 
@@ -66,9 +65,9 @@ def extract_page_segments(page):
 
         rows = t.extract()
         if rows:
-            md = table_to_markdown(rows)
-            if md:
-                segments.append({"type": "table", "text": md})
+            bullets = table_to_bullets(rows)
+            if bullets:
+                segments.append({"type": "table", "text": bullets})
 
         prev_bottom = bottom
 

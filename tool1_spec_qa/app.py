@@ -15,7 +15,7 @@ app = Flask(__name__, static_folder="static")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:latest")
 SPECS_DIR = os.environ.get("SPECS_DIR", "specs")
-TOP_K = int(os.environ.get("TOP_K", "8"))
+TOP_K = int(os.environ.get("TOP_K", "4"))
 TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.2"))
 NUM_PREDICT = int(os.environ.get("NUM_PREDICT", "1024"))
 MAX_THINK_CHARS = int(os.environ.get("MAX_THINK_CHARS", "6000"))
@@ -267,19 +267,15 @@ def query():
         for c in relevant
     )
 
-    prompt = f"""You are a Fire and Gas (F&G) engineering assistant. Answer questions strictly based on the specification excerpts provided below.
+    prompt = f"""You are a Fire and Gas (F&G) engineering assistant. Answer based strictly on the excerpts below.
 
 Rules:
-- Excerpts are ordered by relevance — the FIRST excerpt is most likely to contain the answer. Read it first and thoroughly before moving to others.
-- Tables are formatted as Markdown (| col | col |). They contain alarm set points, limits, and thresholds — read every row.
-- When a sentence ends with "the following:" or "the following set points:" the table immediately after it is the answer to that sentence.
-- Quote the section reference exactly (document number, revision, section number).
-- NEVER invent values. If the answer is genuinely not in the excerpts, say "Not found in the provided specifications."
-- Be concise. For set points or thresholds, list them as bullet points.
-
-Example:
-  Excerpt: "Hydrogen gas detectors shall alarm at the following set points: | 20% LEL | Warning | High Alarm | | 40% LEL | Critical | High, High Alarm |"
-  Correct answer: H2 alarm set points (Section 10.2.2): 20% LEL → Warning / High Alarm, 40% LEL → Critical / High High Alarm.
+- The FIRST excerpt is the most relevant — read it carefully before the others.
+- Bullet points (•) in the excerpts are table rows extracted from the specification. Read every bullet.
+- When a sentence ends with "the following set points:" or "the following levels:", the bullets immediately after are the answer.
+- Quote the section reference (document number, revision, section).
+- If the answer is not in the excerpts, say "Not found in the provided specifications." Do not guess.
+- Be direct. List set points or thresholds as bullet points.
 
 SPECIFICATION EXCERPTS (most relevant first):
 {context}
