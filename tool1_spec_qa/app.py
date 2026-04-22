@@ -261,6 +261,8 @@ def query():
     relevant = find_relevant_chunks(question, _combined_chunks, _cache_key, top_k=top_k)
     sections = ", ".join(f"{c['section']}{'[T]' if c.get('has_table') else ''}" for c in relevant)
     log_info(f"Retrieved {len(relevant)} chunks: {sections}")
+    for idx, c in enumerate(relevant):
+        log_info(f"  Chunk {idx+1}: {c['text'][:80].replace(chr(10), ' ')}")
 
     context = "\n\n".join(
         f"[{c['doc_number']} Rev.{c['revision']} — {c['section']}]\n{c['text']}"

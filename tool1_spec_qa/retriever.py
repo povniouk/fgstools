@@ -238,7 +238,9 @@ class SpecIndex:
                     return True
             return False
 
-        fallback_candidates = []
+        table_fallback = []
+        prose_fallback = []
+
         for i, chunk in enumerate(self.chunks):
             if i in top_indices:
                 continue
@@ -246,15 +248,18 @@ class SpecIndex:
             if chunk.get("has_table"):
                 match_count = sum(1 for t in raw_terms if term_in(t, text_lower))
                 if match_count >= 2:
-                    fallback_candidates.append(i)
+                    table_fallback.append(i)
             else:
-                # Prose: each raw term must match (term OR any of its synonyms)
                 if raw_terms and all(term_in(t, text_lower) for t in raw_terms):
-                    fallback_candidates.append(i)
+                    prose_fallback.append(i)
 
-        # Cap fallback additions to top 3 by combined score to avoid flooding context
-        fallback_candidates.sort(key=lambda i: combined[i], reverse=True)
-        for i in fallback_candidates[:3]:
+        # Table and prose fallbacks are capped independently so a prose chunk
+        # containing the exact answer can't be displaced by table chunks
+        table_fallback.sort(key=lambda i: combined[i], reverse=True)
+        prose_fallback.sort(key=lambda i: combined[i], reverse=True)
+        for i in table_fallback[:2]:
+            top_indices.add(i)
+        for i in prose_fallback[:2]:
             top_indices.add(i)
 
         ordered = sorted(top_indices, key=lambda i: combined[i], reverse=True)
