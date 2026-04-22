@@ -263,7 +263,7 @@ def query():
     log_info(f"Retrieved {len(relevant)} chunks: {sections}")
 
     context = "\n\n".join(
-        f"[Doc: {c['doc_number']} Rev.{c['revision']} | Section: {c['section']}]\n{c['text']}"
+        f"[{c['doc_number']} Rev.{c['revision']} — {c['section']}]\n{c['text']}"
         for c in relevant
     )
 
@@ -273,7 +273,7 @@ Rules:
 - The FIRST excerpt is the most relevant — read it carefully before the others.
 - Bullet points (•) in the excerpts are table rows extracted from the specification. Read every bullet.
 - When a sentence ends with "the following set points:" or "the following levels:", the bullets immediately after are the answer.
-- Quote the section reference (document number, revision, section).
+- Each excerpt starts with [DOC REV — SECTION]. Use that as the citation in your answer.
 - If the answer is not in the excerpts, say "Not found in the provided specifications." Do not guess.
 - Be direct. List set points or thresholds as bullet points.
 
@@ -284,16 +284,20 @@ QUESTION: {question}
 
 ANSWER:"""
 
-    sources = [
-        {
-            "filename": c["source"],
-            "doc_number": c["doc_number"],
-            "title": c["title"],
-            "revision": c["revision"],
-            "section": c["section"],
-        }
-        for c in relevant
-    ]
+    # Show top 3 sources, deduplicated by section — all retrieved chunks listed in log
+    seen_sections = set()
+    sources = []
+    for c in relevant[:3]:
+        key = (c["doc_number"], c["section"])
+        if key not in seen_sections:
+            seen_sections.add(key)
+            sources.append({
+                "filename": c["source"],
+                "doc_number": c["doc_number"],
+                "title": c["title"],
+                "revision": c["revision"],
+                "section": c["section"],
+            })
 
     # Thinking mode needs a bigger budget — thinking tokens count against num_predict
     num_predict = NUM_PREDICT * 4 if current_model["think"] else NUM_PREDICT
