@@ -1,0 +1,17 @@
+[Unit]
+Description=FGS Tools Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=povniouk
+WorkingDirectory=/home/povniouk/spec-qa
+Environment=OLLAMA_URL=http://192.168.8.200:11434
+ExecStart=/home/povniouk/spec-qa/venv/bin/python app.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

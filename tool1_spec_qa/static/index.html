@@ -3,41 +3,66 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>F&G Spec Q&A</title>
+  <title>FGS Tools</title>
   <script src="/static/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #cccccc; min-height: 100vh; }
 
     /* Header */
-    header { background: #252526; padding: 0 32px; border-bottom: 1px solid #007acc; display: flex; align-items: stretch; justify-content: space-between; gap: 16px; }
-    .header-left { display: flex; align-items: center; padding: 12px 0; }
-    header h1 { font-size: 1.2rem; color: #cccccc; font-weight: 400; }
-    header p { font-size: 0.75rem; color: #858585; margin-top: 2px; }
+    header { background: #252526; border-bottom: 1px solid #1a1a1a; display: flex; align-items: stretch; padding: 0 24px; gap: 24px; }
+    .header-brand { display: flex; align-items: center; padding: 10px 0; min-width: 160px; border-right: 1px solid #3c3c3c; padding-right: 24px; }
+    header h1 { font-size: 1.05rem; color: #cccccc; font-weight: 600; letter-spacing: 0.3px; }
+    header p { font-size: 0.72rem; color: #858585; margin-top: 2px; }
 
-    /* Nav tabs */
-    nav { display: flex; align-items: stretch; gap: 0; }
-    .nav-tab { padding: 0 20px; display: flex; align-items: center; font-size: 0.85rem; color: #858585; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s; user-select: none; }
-    .nav-tab:hover { color: #cccccc; }
-    .nav-tab.active { color: #cccccc; border-bottom-color: #007acc; }
-
-    /* Model selector */
-    .model-selector { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 12px 0; }
-    .model-selector label { font-size: 0.78rem; color: #858585; white-space: nowrap; }
-    .model-selector select { background: #3c3c3c; border: 1px solid #3c3c3c; border-radius: 2px; padding: 5px 10px; color: #cccccc; font-size: 0.85rem; cursor: pointer; }
-    .model-selector select:focus { outline: none; border-color: #007acc; }
-    .model-active { font-size: 0.72rem; color: #4ec9b0; white-space: nowrap; }
-    .think-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #858585; flex-shrink: 0; }
-    .think-toggle input[type="checkbox"] { accent-color: #007acc; width: 13px; height: 13px; cursor: pointer; }
-    .think-toggle label { cursor: pointer; white-space: nowrap; }
+    /* Dashboard nav */
+    nav.dashboard-nav { display: flex; align-items: stretch; flex: 1; }
+    .dash-tab { padding: 0 18px; display: flex; align-items: center; font-size: 0.85rem; color: #858585; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s; user-select: none; white-space: nowrap; }
+    .dash-tab:hover { color: #cccccc; background: #2a2a2a; }
+    .dash-tab.active { color: #cccccc; border-bottom-color: #007acc; }
+    .dash-tab.disabled { color: #444; cursor: default; }
+    .dash-tab .badge { background: #37373d; border-radius: 8px; font-size: 0.65rem; padding: 1px 6px; margin-left: 6px; color: #858585; }
+    .dash-tab.active .badge { background: #007acc22; color: #007acc; }
 
     /* Pages */
     .page { display: none; }
     .page.active { display: block; }
-    .container { max-width: 1000px; margin: 0 auto; padding: 28px 16px; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
 
     .section { background: #252526; border: 1px solid #3c3c3c; border-radius: 4px; padding: 20px; margin-bottom: 20px; }
-    .section h2 { font-size: 0.75rem; text-transform: uppercase; color: #858585; letter-spacing: 1px; margin-bottom: 14px; font-weight: 600; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .section h2 { font-size: 0.75rem; text-transform: uppercase; color: #858585; letter-spacing: 1px; font-weight: 600; }
+
+    /* Sub-nav inside Spec Q&A */
+    .sub-nav { display: flex; gap: 0; border-bottom: 1px solid #3c3c3c; margin-bottom: 20px; }
+    .sub-tab { padding: 8px 16px; font-size: 0.85rem; color: #858585; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s; user-select: none; }
+    .sub-tab:hover { color: #cccccc; }
+    .sub-tab.active { color: #cccccc; border-bottom-color: #007acc; }
+
+    /* Model controls inside Spec Q&A */
+    .tool-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .model-selector { display: flex; align-items: center; gap: 8px; }
+    .model-selector label { font-size: 0.78rem; color: #858585; white-space: nowrap; }
+    .model-selector select { background: #3c3c3c; border: 1px solid #3c3c3c; border-radius: 2px; padding: 5px 10px; color: #cccccc; font-size: 0.85rem; cursor: pointer; }
+    .model-selector select:focus { outline: none; border-color: #007acc; }
+    .model-active { font-size: 0.72rem; color: #4ec9b0; }
+    .think-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #858585; }
+    .think-toggle input[type="checkbox"] { accent-color: #007acc; width: 13px; height: 13px; cursor: pointer; }
+    .think-toggle label { cursor: pointer; }
+
+    /* KPI cards (Overview) */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .kpi-card { background: #252526; border: 1px solid #3c3c3c; border-radius: 4px; padding: 18px 20px; }
+    .kpi-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.8px; color: #858585; margin-bottom: 8px; }
+    .kpi-value { font-size: 1.8rem; font-weight: 300; color: #cccccc; }
+    .kpi-sub { font-size: 0.75rem; color: #555; margin-top: 4px; }
+    .kpi-value.warn { color: #dcdcaa; }
+    .kpi-value.ok { color: #4ec9b0; }
+
+    /* Placeholder pages */
+    .coming-soon { text-align: center; padding: 80px 20px; }
+    .coming-soon h2 { font-size: 1.1rem; color: #555; font-weight: 400; margin-bottom: 8px; }
+    .coming-soon p { font-size: 0.85rem; color: #444; }
 
     /* Spec table */
     .spec-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -112,98 +137,193 @@
   </style>
 </head>
 <body>
+
   <header>
-    <div class="header-left">
+    <div class="header-brand">
       <div>
-        <h1>F&G Spec Q&A</h1>
-        <p>Fire &amp; Gas — Specification Query Tool</p>
+        <h1>FGS Tools</h1>
+        <p>Fire &amp; Gas — LNG EPC Project</p>
       </div>
     </div>
-    <nav>
-      <div class="nav-tab active" onclick="showPage('qa')">Q&amp;A</div>
-      <div class="nav-tab" onclick="showPage('manage')">Manage Specs</div>
+    <nav class="dashboard-nav">
+      <div class="dash-tab" onclick="showDash('overview')">Overview</div>
+      <div class="dash-tab active" onclick="showDash('specqa')">Spec Q&amp;A</div>
+      <div class="dash-tab" onclick="showDash('email')">Email Tracker <span class="badge">soon</span></div>
+      <div class="dash-tab" onclick="showDash('spi')">SPI Checker <span class="badge">soon</span></div>
+      <div class="dash-tab" onclick="showDash('cande')">C&amp;E Checker <span class="badge">soon</span></div>
+      <div class="dash-tab" onclick="showDash('admin')">Admin</div>
     </nav>
-    <div class="model-selector">
-      <label for="modelSelect">Model</label>
-      <select id="modelSelect" onchange="selectModel(this.value)"></select>
-      <span class="model-active" id="modelActive"></span>
-    </div>
-    <div class="think-toggle">
-      <input type="checkbox" id="thinkCheck" onchange="setThink(this.checked)">
-      <label for="thinkCheck">Thinking</label>
-    </div>
   </header>
 
-  <!-- Q&A Page -->
-  <div id="page-qa" class="page active">
+  <!-- ── Overview ── -->
+  <div id="page-overview" class="page">
+    <div class="container">
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Open Actions</div>
+          <div class="kpi-value warn" id="kpi-actions">—</div>
+          <div class="kpi-sub">Email tracker not yet active</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Specs Loaded</div>
+          <div class="kpi-value ok" id="kpi-specs">—</div>
+          <div class="kpi-sub">in Spec Q&amp;A</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Last SPI Import</div>
+          <div class="kpi-value" id="kpi-spi">—</div>
+          <div class="kpi-sub">SPI checker not yet active</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">AI Model</div>
+          <div class="kpi-value" id="kpi-model" style="font-size:1rem;padding-top:6px;">—</div>
+          <div class="kpi-sub" id="kpi-ollama">Connecting...</div>
+        </div>
+      </div>
+      <div class="section">
+        <h2>Status</h2>
+        <p style="color:#555;font-size:0.85rem;padding:8px 0;">Dashboard is operational. Tools will populate this view as they come online.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Spec Q&A ── -->
+  <div id="page-specqa" class="page active">
     <div class="container">
 
-      <div class="section">
-        <h2>Loaded Specifications</h2>
-        <table class="spec-table">
-          <thead>
-            <tr>
-              <th>Document Number</th>
-              <th>Title</th>
-              <th>Revision</th>
-              <th>Revision Date</th>
-            </tr>
-          </thead>
-          <tbody id="specTableBody">
-            <tr><td colspan="4" class="empty-row">No specifications loaded.</td></tr>
-          </tbody>
-        </table>
+      <!-- Sub-nav -->
+      <div class="sub-nav">
+        <div class="sub-tab active" onclick="showSubPage('qa', this)">Q&amp;A</div>
+        <div class="sub-tab" onclick="showSubPage('manage', this)">Manage Specs</div>
       </div>
 
-      <div class="section">
-        <h2>Ask a Question</h2>
-        <textarea id="questionInput" placeholder="e.g. What is the required voting logic for confirmed gas detection in a compressor building?"></textarea>
-        <div style="margin-top: 10px;">
-          <button id="askBtn" onclick="askQuestion()">Ask</button>
+      <!-- Q&A sub-page -->
+      <div id="subpage-qa">
+        <!-- Model controls -->
+        <div class="section">
+          <div class="section-header">
+            <h2>Model</h2>
+          </div>
+          <div class="tool-controls">
+            <div class="model-selector">
+              <label for="modelSelect">Model</label>
+              <select id="modelSelect" onchange="selectModel(this.value)"></select>
+              <span class="model-active" id="modelActive"></span>
+            </div>
+            <div class="think-toggle">
+              <input type="checkbox" id="thinkCheck" onchange="setThink(this.checked)">
+              <label for="thinkCheck">Thinking mode</label>
+            </div>
+          </div>
         </div>
-        <div class="status" id="queryStatus"></div>
+
+        <div class="section">
+          <h2>Loaded Specifications</h2>
+          <table class="spec-table">
+            <thead>
+              <tr><th>Document Number</th><th>Title</th><th>Revision</th><th>Revision Date</th></tr>
+            </thead>
+            <tbody id="specTableBody">
+              <tr><td colspan="4" class="empty-row">No specifications loaded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section">
+          <h2>Ask a Question</h2>
+          <textarea id="questionInput" placeholder="e.g. What is the required voting logic for confirmed gas detection in a compressor building?"></textarea>
+          <div style="margin-top: 10px;">
+            <button id="askBtn" onclick="askQuestion()">Ask</button>
+          </div>
+          <div class="status" id="queryStatus"></div>
+        </div>
+
+        <div class="section">
+          <h2>Answer</h2>
+          <div class="answer-box empty" id="answerBox">Answer will appear here.</div>
+          <div class="sources" id="sourcesBox"></div>
+        </div>
       </div>
 
-      <div class="section">
-        <h2>Answer</h2>
-        <div class="answer-box empty" id="answerBox">Answer will appear here.</div>
-        <div class="sources" id="sourcesBox"></div>
+      <!-- Manage Specs sub-page -->
+      <div id="subpage-manage" style="display:none">
+        <div class="section">
+          <h2>Upload Specification PDF</h2>
+          <div id="dropZone">
+            <div style="color:#858585;font-size:0.9rem;">Drag &amp; drop a PDF here, or click to select</div>
+            <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="uploadFile(this.files[0])">
+          </div>
+          <div class="status" id="loadStatus"></div>
+        </div>
+        <div class="section">
+          <h2>Specification Library</h2>
+          <table class="spec-table">
+            <thead>
+              <tr><th>Document Number</th><th>Title</th><th>Revision</th><th>Revision Date</th><th></th></tr>
+            </thead>
+            <tbody id="specTableBodyManage">
+              <tr><td colspan="5" class="empty-row">No specifications loaded.</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
     </div>
   </div>
 
-  <!-- Manage Specs Page -->
-  <div id="page-manage" class="page">
+  <!-- ── Email Tracker ── -->
+  <div id="page-email" class="page">
     <div class="container">
-
-      <div class="section">
-        <h2>Upload Specification PDF</h2>
-        <div id="dropZone">
-          <div style="color:#858585;font-size:0.9rem;">Drag &amp; drop a PDF here, or click to select</div>
-          <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="uploadFile(this.files[0])">
-        </div>
-        <div class="status" id="loadStatus"></div>
+      <div class="coming-soon">
+        <h2>Email Tracker — Coming Soon</h2>
+        <p>Forwards project emails to a dedicated Gmail inbox. Ollama extracts action items, blocking points, and deadlines. You approve, edit, or discard each suggestion before it lands in the action register.</p>
       </div>
+    </div>
+  </div>
 
+  <!-- ── SPI Checker ── -->
+  <div id="page-spi" class="page">
+    <div class="container">
+      <div class="coming-soon">
+        <h2>SPI Consistency Checker — Coming Soon</h2>
+        <p>Ingests weekly SPI Excel exports, stores them in the database, and surfaces a delta report: new tags, changed fields, missing mandatory data. Waiting for complete data from HSED HOC and BoOC.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── C&E Checker ── -->
+  <div id="page-cande" class="page">
+    <div class="container">
+      <div class="coming-soon">
+        <h2>C&amp;E vs Spec Checker — Coming Soon</h2>
+        <p>Verifies cause-effect pairs in the C&amp;E matrix against specification requirements. Waiting for the first C&amp;E draft release.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Admin ── -->
+  <div id="page-admin" class="page">
+    <div class="container">
       <div class="section">
-        <h2>Specification Library</h2>
+        <h2>Service</h2>
+        <p style="font-size:0.85rem;color:#858585;margin-bottom:12px;">The app runs as a systemd service (<code style="color:#ce9178">fgstools</code>) on the fgstools LXC. It starts automatically on boot and restarts on crash.</p>
+        <p style="font-size:0.85rem;color:#555;">Restart and update controls will be added here once the admin API is wired up.</p>
+      </div>
+      <div class="section">
+        <h2>Logs</h2>
+        <p style="font-size:0.85rem;color:#858585;">Use the Output panel at the bottom of the screen to view live app logs. On the LXC, full logs are available via: <code style="color:#ce9178">journalctl -u fgstools -f</code></p>
+      </div>
+      <div class="section">
+        <h2>Infrastructure</h2>
         <table class="spec-table">
-          <thead>
-            <tr>
-              <th>Document Number</th>
-              <th>Title</th>
-              <th>Revision</th>
-              <th>Revision Date</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="specTableBodyManage">
-            <tr><td colspan="5" class="empty-row">No specifications loaded.</td></tr>
+          <tbody>
+            <tr><td style="color:#858585;width:160px">App LXC</td><td>fgstools — 192.168.8.117</td></tr>
+            <tr><td style="color:#858585">AI VM</td><td>gemma4 — 192.168.8.200 (Ollama)</td></tr>
+            <tr><td style="color:#858585">Dev VM</td><td>192.168.8.229</td></tr>
+            <tr><td style="color:#858585">GitHub</td><td>github.com/povniouk/fgstools</td></tr>
           </tbody>
         </table>
       </div>
-
     </div>
   </div>
 
@@ -227,18 +347,11 @@
       const panel = document.getElementById("logPanel");
       panel.className = logExpanded ? "expanded" : "collapsed";
       document.getElementById("logToggleLabel").textContent = logExpanded ? "▼ Hide" : "▲ Show";
-      if (logExpanded) {
-        unreadLogs = 0;
-        document.getElementById("logBadge").style.display = "none";
-        scrollLog();
-      }
+      if (logExpanded) { unreadLogs = 0; document.getElementById("logBadge").style.display = "none"; scrollLog(); }
       document.body.style.paddingBottom = logExpanded ? "220px" : "28px";
     }
 
-    function scrollLog() {
-      const el = document.getElementById("logContent");
-      el.scrollTop = el.scrollHeight;
-    }
+    function scrollLog() { const el = document.getElementById("logContent"); el.scrollTop = el.scrollHeight; }
 
     function appendLog(entry) {
       if (entry.level === "ping") return;
@@ -247,9 +360,7 @@
       line.className = `log-line log-${entry.level}`;
       line.innerHTML = `<span class="log-ts">${entry.ts}</span><span class="log-msg">${entry.msg}</span>`;
       el.appendChild(line);
-      if (logExpanded) {
-        scrollLog();
-      } else {
+      if (logExpanded) { scrollLog(); } else {
         unreadLogs++;
         const badge = document.getElementById("logBadge");
         badge.textContent = unreadLogs > 99 ? "99+" : unreadLogs;
@@ -259,24 +370,45 @@
 
     function startLogStream() {
       const es = new EventSource("/api/logs/stream");
-      es.onmessage = e => {
-        try { appendLog(JSON.parse(e.data)); } catch {}
-      };
-      es.onerror = () => {
-        setTimeout(startLogStream, 3000);
-        es.close();
-      };
+      es.onmessage = e => { try { appendLog(JSON.parse(e.data)); } catch {} };
+      es.onerror = () => { setTimeout(startLogStream, 3000); es.close(); };
     }
-
     startLogStream();
 
-    // --- Navigation ---
-    function showPage(name) {
+    // --- Dashboard navigation ---
+    function showDash(name) {
       document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-      document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".dash-tab").forEach(t => t.classList.remove("active"));
       document.getElementById("page-" + name).classList.add("active");
-      event.target.classList.add("active");
+      event.currentTarget.classList.add("active");
+      if (name === "overview") refreshOverview();
+      if (name === "specqa") { refreshSpecsQA(); refreshModels(); }
+    }
+
+    // --- Sub-navigation (inside Spec Q&A) ---
+    function showSubPage(name, tab) {
+      document.querySelectorAll("[id^='subpage-']").forEach(p => p.style.display = "none");
+      document.querySelectorAll(".sub-tab").forEach(t => t.classList.remove("active"));
+      document.getElementById("subpage-" + name).style.display = "block";
+      tab.classList.add("active");
       if (name === "manage") refreshSpecsManage();
+    }
+
+    // --- Overview KPIs ---
+    async function refreshOverview() {
+      try {
+        const res = await fetch("/api/specs");
+        const data = await res.json();
+        document.getElementById("kpi-specs").textContent = data.specs ? data.specs.length : 0;
+      } catch {}
+      try {
+        const res = await fetch("/api/models");
+        const data = await res.json();
+        document.getElementById("kpi-model").textContent = data.current;
+        document.getElementById("kpi-ollama").textContent = "Ollama connected";
+      } catch {
+        document.getElementById("kpi-ollama").textContent = "Ollama unreachable";
+      }
     }
 
     // --- Model selector ---
@@ -293,8 +425,7 @@
 
     async function selectModel(name) {
       const res = await fetch("/api/models/select", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
+        method: "POST", headers: {"Content-Type": "application/json"},
         body: JSON.stringify({model: name})
       });
       const data = await res.json();
@@ -303,8 +434,7 @@
 
     async function setThink(enabled) {
       await fetch("/api/models/think", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
+        method: "POST", headers: {"Content-Type": "application/json"},
         body: JSON.stringify({think: enabled})
       });
     }
@@ -315,62 +445,43 @@
     dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.style.borderColor = "#007acc"; });
     dropZone.addEventListener("dragleave", () => { dropZone.style.borderColor = "#3c3c3c"; });
     dropZone.addEventListener("drop", e => {
-      e.preventDefault();
-      dropZone.style.borderColor = "#3c3c3c";
-      const file = e.dataTransfer.files[0];
-      if (file) uploadFile(file);
+      e.preventDefault(); dropZone.style.borderColor = "#3c3c3c";
+      const file = e.dataTransfer.files[0]; if (file) uploadFile(file);
     });
 
     async function uploadFile(file) {
-      if (!file || !file.name.endsWith(".pdf")) {
-        setStatus("loadStatus", "error", "Only PDF files are accepted.");
-        return;
-      }
+      if (!file || !file.name.endsWith(".pdf")) { setStatus("loadStatus", "error", "Only PDF files are accepted."); return; }
       setStatus("loadStatus", "", '<span class="spinner"></span>Uploading and parsing ' + file.name + '...');
       const formData = new FormData();
       formData.append("file", file);
       try {
         const res = await fetch("/api/upload", { method: "POST", body: formData });
         const data = await res.json();
-        if (data.error) {
-          setStatus("loadStatus", "error", data.error);
-        } else {
-          setStatus("loadStatus", "ok", `Loaded: ${data.loaded} (${data.chunks} chunks)`);
-          refreshSpecsManage();
-          refreshSpecsQA();
-        }
-      } catch(e) {
-        setStatus("loadStatus", "error", "Connection error.");
-      }
+        if (data.error) { setStatus("loadStatus", "error", data.error); }
+        else { setStatus("loadStatus", "ok", `Loaded: ${data.loaded} (${data.chunks} chunks)`); refreshSpecsManage(); refreshSpecsQA(); }
+      } catch { setStatus("loadStatus", "error", "Connection error."); }
     }
 
-    // --- Spec table (Q&A page — read only) ---
+    // --- Spec table (Q&A — read only) ---
     async function refreshSpecsQA() {
       const res = await fetch("/api/specs");
       const data = await res.json();
       const tbody = document.getElementById("specTableBody");
       if (!data.specs || data.specs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="empty-row">No specifications loaded.</td></tr>';
-        return;
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-row">No specifications loaded.</td></tr>'; return;
       }
-      tbody.innerHTML = data.specs.map(s => `
-        <tr>
-          <td>${s.doc_number || "—"}</td>
-          <td>${s.title || "—"}</td>
-          <td>${s.revision || "—"}</td>
-          <td>${s.rev_date || "—"}</td>
-        </tr>
-      `).join("");
+      tbody.innerHTML = data.specs.map(s =>
+        `<tr><td>${s.doc_number || "—"}</td><td>${s.title || "—"}</td><td>${s.revision || "—"}</td><td>${s.rev_date || "—"}</td></tr>`
+      ).join("");
     }
 
-    // --- Spec table (Manage page — editable) ---
+    // --- Spec table (Manage — editable) ---
     async function refreshSpecsManage() {
       const res = await fetch("/api/specs");
       const data = await res.json();
       const tbody = document.getElementById("specTableBodyManage");
       if (!data.specs || data.specs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No specifications loaded.</td></tr>';
-        return;
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No specifications loaded.</td></tr>'; return;
       }
       tbody.innerHTML = data.specs.map(s => `
         <tr data-filename="${s.filename}">
@@ -379,41 +490,29 @@
           <td><input type="text" value="${s.revision}" placeholder="Rev" style="max-width:60px" data-field="revision"></td>
           <td><input type="text" value="${s.rev_date}" placeholder="e.g. 2025-03-15" data-field="rev_date"></td>
           <td><button class="btn-save" onclick="saveMetadata('${s.filename}', this)">Save</button></td>
-        </tr>
-      `).join("");
+        </tr>`).join("");
     }
 
     async function saveMetadata(filename, btn) {
       const row = btn.closest("tr");
       const meta = {};
-      row.querySelectorAll("input[data-field]").forEach(inp => {
-        meta[inp.dataset.field] = inp.value.trim();
-      });
+      row.querySelectorAll("input[data-field]").forEach(inp => { meta[inp.dataset.field] = inp.value.trim(); });
       try {
         const res = await fetch(`/api/specs/${encodeURIComponent(filename)}/metadata`, {
-          method: "PUT",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify(meta)
+          method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(meta)
         });
         const data = await res.json();
-        if (data.ok) {
-          btn.textContent = "Saved ✓";
-          refreshSpecsQA();
-          setTimeout(() => btn.textContent = "Save", 1500);
-        }
-      } catch(e) {
-        btn.textContent = "Error";
-      }
+        if (data.ok) { btn.textContent = "Saved ✓"; refreshSpecsQA(); setTimeout(() => btn.textContent = "Save", 1500); }
+      } catch { btn.textContent = "Error"; }
     }
 
-    // --- Q&A (streaming) ---
+    // --- Q&A streaming ---
     function renderSources(sources) {
       const sourcesBox = document.getElementById("sourcesBox");
       const unique = [...new Map(sources.map(s => [s.doc_number + s.section, s])).values()];
       sourcesBox.innerHTML = unique.length
         ? `<div class="sources-label">Sources</div>` + unique.map(s =>
-            `<span class="source-tag"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section}</span>`
-          ).join("")
+            `<span class="source-tag"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section}</span>`).join("")
         : "";
     }
 
@@ -430,30 +529,20 @@
       answerBox.textContent = "Waiting for first token...";
       sourcesBox.innerHTML = "";
 
-      let fullText = "";
-      let thinkText = "";
-      let firstToken = true;
-      let firstThink = true;
+      let fullText = "", thinkText = "", firstToken = true, firstThink = true;
       const tStart = performance.now();
 
       try {
         const res = await fetch("/api/query", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
+          method: "POST", headers: {"Content-Type": "application/json"},
           body: JSON.stringify({question})
         });
-
         if (!res.ok || !res.body) {
-          setStatus("queryStatus", "error", "Stream error.");
-          answerBox.textContent = "";
-          btn.disabled = false;
-          return;
+          setStatus("queryStatus", "error", "Stream error."); answerBox.textContent = ""; btn.disabled = false; return;
         }
-
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
-
         while (true) {
           const {done, value} = await reader.read();
           if (done) break;
@@ -473,9 +562,7 @@
               if (event === "sources") {
                 renderSources(obj);
               } else if (event === "thinking") {
-                if (firstThink) {
-                  firstThink = false;
-                }
+                if (firstThink) firstThink = false;
                 thinkText += obj.t;
                 const sec = ((performance.now() - tStart) / 1000).toFixed(1);
                 setStatus("queryStatus", "", `<span class="spinner"></span>Thinking... ${thinkText.length} chars, ${sec}s`);
@@ -483,9 +570,7 @@
                 if (firstToken) {
                   const ms = Math.round(performance.now() - tStart);
                   setStatus("queryStatus", "", `<span class="spinner"></span>Streaming (first token ${ms} ms)...`);
-                  answerBox.className = "answer-box";
-                  answerBox.innerHTML = "";
-                  firstToken = false;
+                  answerBox.className = "answer-box"; answerBox.innerHTML = ""; firstToken = false;
                 }
                 fullText += obj.t;
                 answerBox.innerHTML = marked.parse(fullText);
@@ -497,10 +582,7 @@
             } catch {}
           }
         }
-      } catch(e) {
-        setStatus("queryStatus", "error", "Connection error.");
-        answerBox.textContent = "";
-      }
+      } catch { setStatus("queryStatus", "error", "Connection error."); answerBox.textContent = ""; }
       btn.disabled = false;
     }
 
