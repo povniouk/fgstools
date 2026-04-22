@@ -367,6 +367,25 @@ ANSWER:"""
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.route("/api/debug/chunks")
+def debug_chunks():
+    """Return all chunks as plain text for review — Admin use only."""
+    refresh_cache()
+    filename = request.args.get("file", "")
+    out = []
+    for fname, data in _specs_cache.items():
+        if filename and fname != filename:
+            continue
+        out.append(f"{'='*70}\nFILE: {fname}\n{'='*70}\n")
+        for i, chunk in enumerate(data["chunks"]):
+            out.append(
+                f"--- Chunk {i+1} | Page {chunk.get('page','?')} | "
+                f"Section: {chunk.get('section','?')} ---\n"
+                f"{chunk['text']}\n"
+            )
+    return Response("\n".join(out), mimetype="text/plain")
+
+
 def preload_specs():
     if not os.path.exists(SPECS_DIR):
         return
