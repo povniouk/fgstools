@@ -91,7 +91,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 ## Tools to Build
 
-### Tool 1 — Spec Q&A (`spec-qa`) — COMPLETE v1
+### Tool 1 — Spec Q&A (`spec-qa`) — COMPLETE v2
 **Purpose:** Query spec PDFs in plain language and get answers with exact clause references.
 
 **Example:** *"What is the required voting logic for confirmed gas detection in a compressor building?"*
@@ -101,7 +101,14 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 **Access:** `http://192.168.8.117:5000`
 **Stack:** Flask + pdfplumber + scikit-learn TF-IDF + Ollama API (`http://192.168.8.200:11434`)
 
-**Features implemented:**
+**Features implemented (v2):**
+- Integrated dashboard with tabs: Overview, Spec Q&A, Email Tracker (placeholder), SPI Checker (placeholder), C&E Checker (placeholder), Admin
+- Systemd service (`fgstools.service`) — auto-start on boot, restart on crash
+- Admin tab: Chunk Inspector (select spec, load, keyword filter), Infrastructure info
+- **Retrieval stack:** BM25 + TF-IDF + `nomic-embed-text` embeddings via Ollama, merged via Reciprocal Rank Fusion. Separate table/prose fallback pools. Synonym expansion for F&G vocabulary.
+- **PDF parsing:** pdfplumber `find_tables()` + inline extraction; tables rendered as bullet points (`• cell — cell`) — NOT pipe format (12B models misparse pipes). Boilerplate stripped per page.
+- **Table-aware chunking:** tables are atomic chunks with preceding prose as context prefix; prose word-chunked with overlap between tables
+- **Chunk inspector** in Admin tab for verifying parsing quality without raw URL
 - Two-page UI: Q&A (default) and Manage Specs
 - Spec library table with editable doc number, title, revision, revision date (persisted per-spec)
 - PDF upload via drag & drop on Manage Specs page
