@@ -128,15 +128,24 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - `gemma4:latest` (12B) is stable for production use.
 - Model sometimes says "not found" even when the answer is in the retrieved chunks, particularly for tabular data. Partial fix: prompt now includes a table-reading example. Root cause under investigation.
 
-**Retrieval — known limitations and backlog:**
-- **Current:** TF-IDF (scikit-learn) + hand-coded synonym expansion + keyword fallback. Works for exact terms but fails on semantic synonyms not in the dict.
-- **Problem:** TF-IDF is a keyword matcher — "thresholds" ≠ "set points" without explicit mapping. The synonym dict is a band-aid that requires manual maintenance.
-- **Next improvement (medium effort, one session):** Replace TF-IDF with **hybrid BM25 + local embeddings**:
-  - BM25 (`rank-bm25` library, no GPU) for exact technical terms (tag numbers, clause refs, part numbers)
-  - `nomic-embed-text` via Ollama (CPU, ~274MB) for semantic similarity
-  - Merge both score lists (Reciprocal Rank Fusion) before selecting top-K chunks
-  - This eliminates the synonym dict entirely and handles unseen vocabulary
-- **Chunking concern:** 700-word cross-page chunks may split table context from its heading. Tables are now extracted inline (pdfplumber `find_tables()` + crop), but chunk boundaries can still split a heading from its table if they land in different chunks. Potential fix: sentence-aware chunking that never splits mid-table.
+**RAG pipeline — known challenges, current status, and backlog:**
+
+| Challenge | Status | Notes |
+|-----------|--------|-------|
+| PDF table extraction | ✅ Addressed | pdfplumber `find_tables()` + inline Markdown injection. Sufficient for digital PDFs. For scanned/image PDFs, would need vision model (not anticipated for CWLNG specs). |
+| Table atomicity | ✅ Fixed | Tables are now atomic chunks; each carries the 4 preceding prose lines as context prefix. |
+| Word-count chunking splits context | ⚠️ Partial | Tables are safe. Prose chunks are still word-count based. Future: semantic chunking (split at sentence/paragraph boundaries). |
+| Vocabulary mismatch (synonyms) | ⚠️ Partial | BM25+TF-IDF hybrid + hand-coded synonym dict + fuzzy acronym fallback. Works for known terms. Breaks on new vocabulary. Long-term fix: embeddings. |
+| Hallucinations / ignoring context | ⚠️ Partial | Prompt explicitly forbids guessing and includes a table-reading example. Model still occasionally says "not found" when answer is in retrieved chunks. May improve with re-ranker. |
+| Needle in a haystack (multi-page answers) | ❌ Not addressed | TOP_K=8 may miss relevant chunks if answer spans distant pages. Fix: **re-ranker** (retrieve top-20 with BM25, re-score with a cross-encoder to top-5 before sending to LLM). |
+
+**Backlog — priority order:**
+
+1. **Semantic embeddings** (next, one session) — pull `nomic-embed-text` via Ollama (CPU, ~274MB), embed all chunks at build time, cache to `.npy` file, merge with BM25 via RRF. Eliminates synonym dict entirely. Handles unseen vocabulary automatically.
+
+2. **Re-ranker** (after embeddings) — retrieve top-20 via BM25+embeddings, then use a local cross-encoder (`bge-reranker-base`, ~270MB, CPU) to re-score and select top-5 before sending to LLM. Directly solves "needle in a haystack" and hallucination-from-wrong-context problems.
+
+3. **Semantic chunking** (low urgency) — split prose at sentence/paragraph boundaries rather than raw word count. Ensures a sentence is never cut mid-way. Libraries: `nltk` or simple regex on `.`, `\n\n` boundaries.
 
 ---
 
