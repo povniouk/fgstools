@@ -44,37 +44,46 @@ def table_to_markdown(rows):
 
 
 def extract_page_content(page):
-    """Extract text excluding table regions, then append tables as Markdown."""
+    """Build page content top-to-bottom: text sections interleaved with
+    Markdown tables at their original inline position."""
     table_objects = page.find_tables()
 
-    if table_objects:
-        table_bboxes = [t.bbox for t in table_objects]
+    if not table_objects:
+        return strip_boilerplate(page.extract_text() or "")
 
-        def not_in_table(obj):
-            for x0, top, x1, bottom in table_bboxes:
-                if (obj.get("x0", 0) >= x0 - 2 and
-                        obj.get("x1", 0) <= x1 + 2 and
-                        obj.get("top", 0) >= top - 2 and
-                        obj.get("bottom", 0) <= bottom + 2):
-                    return False
-            return True
+    # Sort tables top to bottom by their y position
+    table_objects = sorted(table_objects, key=lambda t: t.bbox[1])
 
-        text = page.filter(not_in_table).extract_text() or ""
-    else:
-        text = page.extract_text() or ""
+    parts = []
+    prev_bottom = 0
 
-    md_tables = []
     for t in table_objects:
+        x0, top, x1, bottom = t.bbox
+
+        # Text above this table
+        if top > prev_bottom + 2:
+            region = page.crop((0, prev_bottom, page.width, top))
+            txt = region.extract_text()
+            if txt and txt.strip():
+                parts.append(txt.strip())
+
+        # Table as Markdown
         rows = t.extract()
         if rows:
             md = table_to_markdown(rows)
             if md:
-                md_tables.append(md)
+                parts.append(md)
 
-    if md_tables:
-        text = text.strip() + "\n\n" + "\n\n".join(md_tables)
+        prev_bottom = bottom
 
-    return strip_boilerplate(text)
+    # Text below last table
+    if prev_bottom < page.height - 2:
+        region = page.crop((0, prev_bottom, page.width, page.height))
+        txt = region.extract_text()
+        if txt and txt.strip():
+            parts.append(txt.strip())
+
+    return strip_boilerplate("\n\n".join(parts))
 
 
 def load_pdf_chunks(path, chunk_size=700, overlap=150):
