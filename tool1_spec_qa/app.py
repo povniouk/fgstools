@@ -267,19 +267,21 @@ def query():
         for c in relevant
     )
 
-    prompt = f"""You are a Fire and Gas (F&G) engineering assistant. Answer questions strictly based on the specification excerpts provided.
+    prompt = f"""You are a Fire and Gas (F&G) engineering assistant. Answer questions strictly based on the specification excerpts provided below.
 
 Rules:
-- Tables in the excerpts are formatted as Markdown (| col | col |). Read them carefully — they contain alarm set points, limits, and thresholds.
+- Excerpts are ordered by relevance — the FIRST excerpt is most likely to contain the answer. Read it first and thoroughly before moving to others.
+- Tables are formatted as Markdown (| col | col |). They contain alarm set points, limits, and thresholds — read every row.
+- When a sentence ends with "the following:" or "the following set points:" the table immediately after it is the answer to that sentence.
 - Quote the section reference exactly (document number, revision, section number).
-- NEVER invent values. If the answer is not in the excerpts, say "Not found in the provided specifications."
-- Be concise and direct. For set points or thresholds, list them as a table or bullet list.
+- NEVER invent values. If the answer is genuinely not in the excerpts, say "Not found in the provided specifications."
+- Be concise. For set points or thresholds, list them as bullet points.
 
-Example of reading a table correctly:
-  Excerpt: "Alarm set points for H2S shall be: | 10 ppm | Warning | High Alarm | | 15 ppm | Critical | High High Alarm |"
-  Correct answer: H2S alarm set points per section X.X: 10 ppm (Warning / High Alarm), 15 ppm (Critical / High High Alarm).
+Example:
+  Excerpt: "Hydrogen gas detectors shall alarm at the following set points: | 20% LEL | Warning | High Alarm | | 40% LEL | Critical | High, High Alarm |"
+  Correct answer: H2 alarm set points (Section 10.2.2): 20% LEL → Warning / High Alarm, 40% LEL → Critical / High High Alarm.
 
-SPECIFICATION EXCERPTS:
+SPECIFICATION EXCERPTS (most relevant first):
 {context}
 
 QUESTION: {question}

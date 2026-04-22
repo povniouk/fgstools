@@ -233,19 +233,23 @@ class SpecIndex:
                     return True
             return False
 
+        fallback_candidates = []
         for i, chunk in enumerate(self.chunks):
             if i in top_indices:
                 continue
             text_lower = chunk["text"].lower()
             if chunk.get("has_table"):
-                # Table chunks: force-include if at least 2 raw terms match
-                # (prevents single generic word like "gas" from matching everything)
                 match_count = sum(1 for t in raw_terms if term_in(t, text_lower))
                 if match_count >= 2:
-                    top_indices.add(i)
+                    fallback_candidates.append(i)
             else:
                 if raw_terms and all(term_in(t, text_lower) for t in key_terms):
-                    top_indices.add(i)
+                    fallback_candidates.append(i)
+
+        # Cap fallback additions to top 3 by combined score to avoid flooding context
+        fallback_candidates.sort(key=lambda i: combined[i], reverse=True)
+        for i in fallback_candidates[:3]:
+            top_indices.add(i)
 
         ordered = sorted(top_indices, key=lambda i: combined[i], reverse=True)
         return [self.chunks[i] for i in ordered]
