@@ -1,6 +1,33 @@
 import pdfplumber
 import re
 
+# Patterns that match recurring header/footer boilerplate in CWLNG spec PDFs
+_BOILERPLATE = re.compile(
+    r"(CUI/CEII\s*[-—]|"
+    r"CONTAINS CRITICAL ENERGY|"
+    r"DO NOT RELEASE|"
+    r"Project\s+N[°o]\s+Unit\s+Doc|"
+    r"078051C\s+000|"
+    r"Client\s+Doc\.\s+No\.|"
+    r"Client\s+Commonwealth|"
+    r"Project\s+Commonwealth|"
+    r"Location\s+Cameron|"
+    r"FIRE AND SAF[ET]+Y SPECIFICATION|"
+    r"Confidential\s*[–-]\s*Do Not Disclose|"
+    r"Copyright\s+Technip|"
+    r"Technip Energies USA|"
+    r"LAPELS\s+Firm\s+Reg|"
+    r"All Rights Reserved|"
+    r"\d{6}[A-Z]\s+\d{3}\s+[A-Z]+\s+\d{4})"  # project code lines
+, re.IGNORECASE)
+
+
+def strip_boilerplate(text):
+    """Remove recurring header/footer lines from spec page text."""
+    lines = text.split("\n")
+    cleaned = [ln for ln in lines if not _BOILERPLATE.search(ln)]
+    return "\n".join(cleaned)
+
 
 def table_to_markdown(rows):
     if not rows:
@@ -47,7 +74,7 @@ def extract_page_content(page):
     if md_tables:
         text = text.strip() + "\n\n" + "\n\n".join(md_tables)
 
-    return text
+    return strip_boilerplate(text)
 
 
 def load_pdf_chunks(path, chunk_size=700, overlap=150):
