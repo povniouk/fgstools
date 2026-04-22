@@ -248,7 +248,8 @@ class SpecIndex:
                 if match_count >= 2:
                     fallback_candidates.append(i)
             else:
-                if raw_terms and all(term_in(t, text_lower) for t in key_terms):
+                # Prose: each raw term must match (term OR any of its synonyms)
+                if raw_terms and all(term_in(t, text_lower) for t in raw_terms):
                     fallback_candidates.append(i)
 
         # Cap fallback additions to top 3 by combined score to avoid flooding context
