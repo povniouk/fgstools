@@ -3,3 +3,4 @@ pdfplumber
 requests
 scikit-learn
 numpy
+rank-bm25
