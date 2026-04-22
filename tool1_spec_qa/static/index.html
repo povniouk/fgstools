@@ -324,6 +324,20 @@
           </tbody>
         </table>
       </div>
+
+      <div class="section">
+        <h2>Chunk Inspector</h2>
+        <p style="font-size:0.85rem;color:#858585;margin-bottom:12px;">Inspect extracted chunks for any spec — verify table parsing and section detection after uploading or re-parsing a PDF.</p>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+          <select id="debugSpecSelect" style="background:#3c3c3c;border:1px solid #3c3c3c;border-radius:2px;padding:6px 10px;color:#cccccc;font-size:0.85rem;flex:1;min-width:200px;">
+            <option value="">— select a spec —</option>
+          </select>
+          <input type="text" id="debugSearch" placeholder="Filter chunks (keyword)" style="background:#3c3c3c;border:1px solid #3c3c3c;border-radius:2px;padding:6px 10px;color:#cccccc;font-size:0.85rem;flex:1;min-width:160px;">
+          <button onclick="loadChunks()" style="padding:6px 16px;font-size:0.85rem;">Load</button>
+        </div>
+        <div id="debugStatus" class="status"></div>
+        <pre id="debugOutput" style="display:none;background:#1e1e1e;border:1px solid #3c3c3c;border-radius:2px;padding:12px;font-family:'Consolas',monospace;font-size:0.78rem;line-height:1.6;color:#d4d4d4;overflow:auto;max-height:500px;white-space:pre-wrap;word-break:break-word;margin-top:10px;"></pre>
+      </div>
     </div>
   </div>
 
@@ -383,6 +397,7 @@
       event.currentTarget.classList.add("active");
       if (name === "overview") refreshOverview();
       if (name === "specqa") { refreshSpecsQA(); refreshModels(); }
+      if (name === "admin") populateDebugSpecSelect();
     }
 
     // --- Sub-navigation (inside Spec Q&A) ---
@@ -594,6 +609,49 @@
 
     document.getElementById("questionInput").addEventListener("keydown", function(e) {
       if (e.key === "Enter" && e.ctrlKey) askQuestion();
+    });
+
+    // --- Chunk inspector (Admin tab) ---
+    async function populateDebugSpecSelect() {
+      const res = await fetch("/api/specs");
+      const data = await res.json();
+      const sel = document.getElementById("debugSpecSelect");
+      sel.innerHTML = '<option value="">— select a spec —</option>' +
+        (data.specs || []).map(s =>
+          `<option value="${s.filename}">${s.doc_number ? s.doc_number + ' — ' : ''}${s.title || s.filename}</option>`
+        ).join("");
+    }
+
+    let _rawChunkText = "";
+    async function loadChunks() {
+      const file = document.getElementById("debugSpecSelect").value;
+      if (!file) { setStatus("debugStatus", "error", "Select a spec first."); return; }
+      setStatus("debugStatus", "", '<span class="spinner"></span>Loading chunks...');
+      document.getElementById("debugOutput").style.display = "none";
+      try {
+        const res = await fetch("/api/debug/chunks?file=" + encodeURIComponent(file));
+        _rawChunkText = await res.text();
+        applyDebugFilter();
+        setStatus("debugStatus", "ok", "Loaded. Use the filter box to search by keyword or section.");
+      } catch { setStatus("debugStatus", "error", "Failed to load chunks."); }
+    }
+
+    function applyDebugFilter() {
+      const kw = document.getElementById("debugSearch").value.trim().toLowerCase();
+      const out = document.getElementById("debugOutput");
+      if (!_rawChunkText) return;
+      if (!kw) {
+        out.textContent = _rawChunkText;
+      } else {
+        const blocks = _rawChunkText.split(/\n(?=--- Chunk)/);
+        const matched = blocks.filter(b => b.toLowerCase().includes(kw));
+        out.textContent = matched.length ? matched.join("\n") : "(no chunks match '" + kw + "')";
+      }
+      out.style.display = "block";
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("debugSearch").addEventListener("input", applyDebugFilter);
     });
 
     refreshSpecsQA();
