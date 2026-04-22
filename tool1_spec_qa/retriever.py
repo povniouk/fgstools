@@ -2,6 +2,52 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
+# Domain synonym map — bridges user vocabulary to spec vocabulary.
+# Keys are lowercase single words; values are space-separated synonyms to append.
+_SYNONYMS = {
+    # Alarm terminology
+    "threshold":   "setpoint set point alarm level limit",
+    "thresholds":  "setpoints set points alarm levels limits",
+    "setpoint":    "threshold alarm level set point",
+    "setpoints":   "thresholds alarm levels set points",
+    "limit":       "threshold setpoint alarm level",
+    "limits":      "thresholds setpoints alarm levels",
+    "level":       "threshold setpoint alarm limit",
+    "levels":      "thresholds setpoints alarm limits",
+    # Gas names
+    "h2s":         "hydrogen sulfide",
+    "co":          "carbon monoxide",
+    "o2":          "oxygen deficiency",
+    "nh3":         "ammonia",
+    "lel":         "lower explosive limit flammable",
+    "flammable":   "lel explosive gas",
+    # Detection vocabulary
+    "detector":    "sensor transmitter detection",
+    "detectors":   "sensors transmitters detection",
+    "sensor":      "detector transmitter",
+    "sensors":     "detectors transmitters",
+    "alarm":       "alert warning setpoint threshold",
+    "warning":     "alarm alert high",
+    "voting":      "logic 1oo2 2oo3 1oo3",
+    # Action vocabulary
+    "shutdown":    "trip sil interlock",
+    "trip":        "shutdown interlock",
+    "interlock":   "shutdown trip sil",
+}
+
+
+def expand_query(question):
+    """Append synonym terms to bridge vocabulary gaps between user language and spec language."""
+    words = question.lower().split()
+    extra = []
+    for word in words:
+        clean = word.strip("?.,;:()")
+        if clean in _SYNONYMS:
+            extra.extend(_SYNONYMS[clean].split())
+    if extra:
+        return question + " " + " ".join(extra)
+    return question
+
 
 class SpecIndex:
     def __init__(self):
@@ -25,7 +71,8 @@ class SpecIndex:
     def query(self, question, top_k=4):
         if self.vectorizer is None or not self.chunks:
             return []
-        q_vec = self.vectorizer.transform([question])
+        expanded = expand_query(question)
+        q_vec = self.vectorizer.transform([expanded])
         scores = cosine_similarity(q_vec, self.matrix).flatten()
         top_indices = np.argsort(scores)[::-1][:top_k]
         return [self.chunks[i] for i in top_indices if scores[i] > 0]
