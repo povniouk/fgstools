@@ -59,6 +59,9 @@ _STOPWORDS = {
     "where", "which", "who", "does", "do", "be", "been", "being", "have",
     "has", "had", "can", "could", "will", "would", "should", "shall", "may",
     "might", "its", "their", "any", "all", "each", "per", "as", "if",
+    # Question framing words
+    "tell", "me", "you", "give", "explain", "describe", "show", "list",
+    "know", "find", "get", "provide", "information", "details", "specify",
 }
 
 
