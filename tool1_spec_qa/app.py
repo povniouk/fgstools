@@ -264,13 +264,17 @@ def query():
         for c in relevant
     )
 
-    prompt = f"""You are a Fire and Gas (F&G) engineering assistant. You answer questions strictly based on the specification documents provided below.
+    prompt = f"""You are a Fire and Gas (F&G) engineering assistant. Answer questions strictly based on the specification excerpts provided.
 
 Rules:
-- Quote the relevant clause or section reference exactly as it appears (document number, revision, section number)
-- NEVER invent, extend, or pad document codes, tag numbers, or section numbers — only use values that appear verbatim in the excerpts
-- If the answer is not found in the excerpts, say "Not found in the provided specifications" — do not guess
-- Be concise: answer in 1-3 short paragraphs maximum
+- Tables in the excerpts are formatted as Markdown (| col | col |). Read them carefully — they contain alarm set points, limits, and thresholds.
+- Quote the section reference exactly (document number, revision, section number).
+- NEVER invent values. If the answer is not in the excerpts, say "Not found in the provided specifications."
+- Be concise and direct. For set points or thresholds, list them as a table or bullet list.
+
+Example of reading a table correctly:
+  Excerpt: "Alarm set points for H2S shall be: | 10 ppm | Warning | High Alarm | | 15 ppm | Critical | High High Alarm |"
+  Correct answer: H2S alarm set points per section X.X: 10 ppm (Warning / High Alarm), 15 ppm (Critical / High High Alarm).
 
 SPECIFICATION EXCERPTS:
 {context}

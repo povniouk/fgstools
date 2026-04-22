@@ -71,11 +71,31 @@ class SpecIndex:
     def query(self, question, top_k=4):
         if self.vectorizer is None or not self.chunks:
             return []
+
         expanded = expand_query(question)
         q_vec = self.vectorizer.transform([expanded])
         scores = cosine_similarity(q_vec, self.matrix).flatten()
-        top_indices = np.argsort(scores)[::-1][:top_k]
-        return [self.chunks[i] for i in top_indices if scores[i] > 0]
+        tfidf_hits = set(int(i) for i in np.argsort(scores)[::-1][:top_k] if scores[i] > 0)
+
+        # Keyword fallback: force-include any chunk containing all key terms
+        key_terms = [w.strip("?.,;:()").lower() for w in question.split() if len(w) > 2]
+        keyword_hits = set()
+        if key_terms:
+            for i, chunk in enumerate(self.chunks):
+                if i not in tfidf_hits:
+                    text_lower = chunk["text"].lower()
+                    if all(term in text_lower for term in key_terms):
+                        keyword_hits.add(i)
+
+        # TF-IDF results first, keyword fallbacks appended
+        ordered = list(tfidf_hits) + list(keyword_hits)
+        seen = set()
+        results = []
+        for i in ordered:
+            if i not in seen:
+                seen.add(i)
+                results.append(self.chunks[i])
+        return results
 
 
 spec_index = SpecIndex()
