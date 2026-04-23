@@ -340,7 +340,8 @@ ANSWER:"""
             sources.append({
                 "filename": "", "doc_number": "Email",
                 "title": c["sender"], "revision": c["revision"],
-                "section": c["section"], "page": 0, "is_email": True,
+                "section": c["section"], "page": 0,
+                "is_email": True, "email_id": c["email_id"],
             })
     for c in relevant:
         key = (c["doc_number"], c["section"])

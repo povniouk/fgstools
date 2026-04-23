@@ -109,6 +109,15 @@
     .contact-input { background: #2d2d2d; border: 1px solid #3c3c3c; border-radius: 2px; color: #cccccc; padding: 4px 7px; font-size: 0.82rem; font-family: inherit; width: 100%; }
     .contact-input:focus { outline: none; border-color: #007acc; }
 
+    /* Email viewer modal */
+    #emailModalBackdrop { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:300; display:none; align-items:center; justify-content:center; }
+    #emailModalBackdrop.open { display:flex; }
+    #emailModal { background:#252526; border:1px solid #3c3c3c; border-radius:4px; width:min(680px,92vw); max-height:80vh; display:flex; flex-direction:column; }
+    .em-header { display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-bottom:1px solid #3c3c3c; background:#2d2d2d; flex-shrink:0; border-radius:4px 4px 0 0; }
+    .em-meta { padding:12px 18px; border-bottom:1px solid #2a2a2a; font-size:0.8rem; color:#858585; display:flex; flex-direction:column; gap:3px; flex-shrink:0; }
+    .em-meta strong { color:#9cdcfe; }
+    .em-body { flex:1; overflow-y:auto; padding:14px 18px; font-size:0.84rem; color:#cccccc; white-space:pre-wrap; word-break:break-word; line-height:1.6; }
+
     /* Side panel (M4) */
     #sidePanelBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 199; display: none; }
     #sidePanelBackdrop.open { display: block; }
@@ -503,6 +512,21 @@
   </div>
 
   <!-- Log Panel -->
+  <!-- Email viewer modal -->
+  <div id="emailModalBackdrop" onclick="closeEmailModal()">
+    <div id="emailModal" onclick="event.stopPropagation()">
+      <div class="em-header">
+        <span style="font-size:0.85rem;font-weight:600;color:#cccccc;" id="emSubject"></span>
+        <button onclick="closeEmailModal()" style="background:none;border:none;color:#858585;font-size:1.2rem;cursor:pointer;padding:0;line-height:1;">✕</button>
+      </div>
+      <div class="em-meta">
+        <div><strong>From:</strong> <span id="emSender"></span></div>
+        <div><strong>Date:</strong> <span id="emDate"></span></div>
+      </div>
+      <div class="em-body" id="emBody"></div>
+    </div>
+  </div>
+
   <!-- Side panel (M4) -->
   <div id="sidePanelBackdrop" onclick="closeItemPanel()"></div>
   <div id="sidePanel">
@@ -757,7 +781,7 @@
       const sourcesBox = document.getElementById("sourcesBox");
       sourcesBox.innerHTML = sources.length
         ? `<div class="sources-label">Sources</div>` + sources.map(s => s.is_email
-            ? `<span class="source-tag" style="border-color:#3a4a3a;color:#4ec9b0;"><strong>Email</strong> — ${escHtml(s.section)}</span>`
+            ? `<span class="source-tag" style="border-color:#3a4a3a;color:#4ec9b0;cursor:pointer;" onclick="openEmailModal(${s.email_id})"><strong>Email</strong> — ${escHtml(s.section)}</span>`
             : `<a class="source-tag" href="/pdf/${encodeURIComponent(s.filename)}#page=${s.page}" target="_blank"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section} p.${s.page}</a>`
           ).join("")
         : "";
@@ -1359,7 +1383,27 @@
       });
     }
 
-    document.addEventListener("keydown", e => { if (e.key === "Escape") closeItemPanel(); });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") { closeItemPanel(); closeEmailModal(); }
+    });
+
+    // --- Email viewer modal ---
+    async function openEmailModal(emailId) {
+      try {
+        const res = await fetch(`/api/email/${emailId}`);
+        const data = await res.json();
+        if (data.error) return;
+        document.getElementById("emSubject").textContent = data.subject || "(no subject)";
+        document.getElementById("emSender").textContent = data.sender || "";
+        document.getElementById("emDate").textContent = (data.sent_date || "").slice(0, 25);
+        document.getElementById("emBody").textContent = data.body_text || "";
+        document.getElementById("emailModalBackdrop").classList.add("open");
+      } catch {}
+    }
+
+    function closeEmailModal() {
+      document.getElementById("emailModalBackdrop").classList.remove("open");
+    }
 
     // --- Attachments ---
     async function loadAttachments(itemId) {

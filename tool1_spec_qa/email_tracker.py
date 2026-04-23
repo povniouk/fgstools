@@ -342,6 +342,7 @@ def retrieve_email_chunks(question, top_k=3):
             "title": sender_name,
             "revision": date,
             "is_email": True,
+            "email_id": row["email_id"],
             "sent_date": row["sent_date"] or "",
             "sender": sender_name,
         })
@@ -637,6 +638,19 @@ def delete_item(item_id):
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+@bp.route("/api/email/<int:email_id>", methods=["GET"])
+def get_email(email_id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, sender, subject, sent_date, body_text, imported_at FROM emails WHERE id=?",
+        (email_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(dict(row))
 
 
 @bp.route("/api/email/<int:email_id>/reextract", methods=["POST"])
