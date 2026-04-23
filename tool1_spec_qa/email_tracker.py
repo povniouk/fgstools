@@ -4,7 +4,9 @@ import json
 import datetime
 import sqlite3
 import tempfile
+import threading
 import requests
+import numpy as np
 import email as email_lib
 from email import policy as email_policy
 from email.utils import parseaddr
@@ -63,6 +65,17 @@ def init_db():
         );
     """)
     conn.executescript("""
+        CREATE TABLE IF NOT EXISTS email_chunks (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_id   INTEGER,
+            chunk_idx  INTEGER,
+            text       TEXT,
+            sender     TEXT,
+            sent_date  TEXT,
+            discipline TEXT,
+            embedding  TEXT,
+            FOREIGN KEY (email_id) REFERENCES emails(id)
+        );
         CREATE TABLE IF NOT EXISTS attachments (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id       INTEGER,
@@ -229,6 +242,109 @@ JSON:"""
     except Exception as e:
         print(f"[email_tracker] Extraction failed: {e}")
     return []
+
+
+def _chunk_text(text, max_words=200, overlap=40):
+    words = text.split()
+    chunks, start = [], 0
+    while start < len(words):
+        end = min(start + max_words, len(words))
+        chunks.append(" ".join(words[start:end]))
+        if end == len(words):
+            break
+        start += max_words - overlap
+    return chunks
+
+
+def _embed(text):
+    try:
+        res = requests.post(
+            f"{OLLAMA_URL}/api/embeddings",
+            json={"model": "nomic-embed-text", "prompt": text[:2000]},
+            timeout=30,
+        )
+        return res.json().get("embedding", [])
+    except Exception as e:
+        print(f"[email_tracker] Embedding failed: {e}")
+        return []
+
+
+def _index_email_body(email_id, body_text, sender, sent_date, discipline):
+    name, _ = parseaddr(sender)
+    conn = get_db()
+    conn.execute("DELETE FROM email_chunks WHERE email_id=?", (email_id,))
+    for i, chunk in enumerate(_chunk_text(clean_body(body_text))):
+        if len(chunk.strip()) < 30:
+            continue
+        emb = _embed(chunk)
+        if emb:
+            conn.execute(
+                "INSERT INTO email_chunks "
+                "(email_id, chunk_idx, text, sender, sent_date, discipline, embedding) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (email_id, i, chunk, name or sender, sent_date, discipline,
+                 json.dumps(emb)),
+            )
+    conn.commit()
+    conn.close()
+    print(f"[email_tracker] Indexed email {email_id}")
+
+
+def retrieve_email_chunks(question, top_k=3):
+    """Cosine similarity search over indexed email chunks. Returns formatted chunk dicts."""
+    q_emb = _embed(question)
+    if not q_emb:
+        return []
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT ec.*, e.subject FROM email_chunks ec "
+        "JOIN emails e ON ec.email_id = e.id WHERE ec.embedding IS NOT NULL"
+    ).fetchall()
+    conn.close()
+    if not rows:
+        return []
+
+    q_vec = np.array(q_emb, dtype=np.float32)
+    q_norm = np.linalg.norm(q_vec)
+    if q_norm == 0:
+        return []
+
+    scored = []
+    for row in rows:
+        try:
+            emb = np.array(json.loads(row["embedding"]), dtype=np.float32)
+            n = np.linalg.norm(emb)
+            score = float(np.dot(q_vec, emb) / (q_norm * n)) if n > 0 else 0
+            scored.append((score, row))
+        except Exception:
+            pass
+
+    scored.sort(key=lambda x: -x[0])
+    result = []
+    seen = set()
+    for _, row in scored:
+        key = (row["email_id"], row["chunk_idx"])
+        if key in seen:
+            continue
+        seen.add(key)
+        date = (row["sent_date"] or "")[:10]
+        sender_name = row["sender"] or ""
+        result.append({
+            "text": row["text"],
+            "section": f"{sender_name} — {date}",
+            "page": 0,
+            "has_table": False,
+            "source": "email",
+            "doc_number": "Email",
+            "title": sender_name,
+            "revision": date,
+            "is_email": True,
+            "sent_date": row["sent_date"] or "",
+            "sender": sender_name,
+        })
+        if len(result) >= top_k:
+            break
+    return result
 
 
 def extract_contact(body_text, sender):
@@ -411,6 +527,21 @@ def approve_items():
         )
     conn.commit()
     conn.close()
+
+    # Index email body for project memory (background — non-blocking)
+    discipline = items[0].get("discipline", "") if items else ""
+    email_row = get_db().execute(
+        "SELECT body_text, sender, sent_date FROM emails WHERE id=?", (email_id,)
+    ).fetchone()
+    if email_row:
+        t = threading.Thread(
+            target=_index_email_body,
+            args=(email_id, email_row["body_text"], email_row["sender"],
+                  email_row["sent_date"], discipline),
+            daemon=True,
+        )
+        t.start()
+
     return jsonify({"ok": True, "saved": len(items)})
 
 

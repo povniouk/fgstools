@@ -274,6 +274,10 @@
               <input type="checkbox" id="thinkCheck" onchange="setThink(this.checked)">
               <label for="thinkCheck">Thinking mode</label>
             </div>
+            <div class="think-toggle">
+              <input type="checkbox" id="emailHistoryCheck">
+              <label for="emailHistoryCheck">Email history</label>
+            </div>
           </div>
         </div>
 
@@ -746,8 +750,10 @@
     function renderSources(sources) {
       const sourcesBox = document.getElementById("sourcesBox");
       sourcesBox.innerHTML = sources.length
-        ? `<div class="sources-label">Sources</div>` + sources.map(s =>
-            `<a class="source-tag" href="/pdf/${encodeURIComponent(s.filename)}#page=${s.page}" target="_blank"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section} p.${s.page}</a>`).join("")
+        ? `<div class="sources-label">Sources</div>` + sources.map(s => s.is_email
+            ? `<span class="source-tag" style="border-color:#3a4a3a;color:#4ec9b0;"><strong>Email</strong> — ${escHtml(s.section)}</span>`
+            : `<a class="source-tag" href="/pdf/${encodeURIComponent(s.filename)}#page=${s.page}" target="_blank"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section} p.${s.page}</a>`
+          ).join("")
         : "";
     }
 
@@ -798,7 +804,7 @@
       try {
         const res = await fetch("/api/query", {
           method: "POST", headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({question})
+          body: JSON.stringify({question, include_email: document.getElementById("emailHistoryCheck").checked})
         });
         if (!res.ok || !res.body) {
           setStatus("queryStatus", "error", "Stream error."); answerBox.textContent = ""; btn.disabled = false; return;

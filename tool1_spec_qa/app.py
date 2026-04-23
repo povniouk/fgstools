@@ -23,6 +23,7 @@ MAX_THINK_CHARS = int(os.environ.get("MAX_THINK_CHARS", "6000"))
 current_model = {"name": MODEL, "think": False}
 
 import email_tracker as _email_tracker
+from email_tracker import retrieve_email_chunks
 app.register_blueprint(_email_tracker.bp)
 _email_tracker._current_model = current_model  # share live model reference
 
@@ -272,7 +273,9 @@ def query():
     if not question:
         return jsonify({"error": "question required"}), 400
 
-    log_info(f"Query received: {question[:80]}{'...' if len(question) > 80 else ''}")
+    include_email = bool(data.get("include_email", False))
+    log_info(f"Query received: {question[:80]}{'...' if len(question) > 80 else ''}"
+             + (" [+email history]" if include_email else ""))
 
     refresh_cache()
     if not _combined_chunks:
@@ -282,11 +285,31 @@ def query():
     top_k = TOP_K * 2 if current_model["think"] else TOP_K
     relevant = find_relevant_chunks(question, _combined_chunks, _cache_key, top_k=top_k)
     sections = ", ".join(f"{c['section']}{'[T]' if c.get('has_table') else ''}" for c in relevant)
-    log_info(f"Retrieved {len(relevant)} chunks: {sections}")
+    log_info(f"Retrieved {len(relevant)} spec chunks: {sections}")
 
-    context = "\n\n".join(
+    email_chunks = []
+    if include_email:
+        email_chunks = retrieve_email_chunks(question, top_k=3)
+        if email_chunks:
+            log_info(f"Retrieved {len(email_chunks)} email chunk(s): "
+                     + ", ".join(c["sender"] for c in email_chunks))
+
+    spec_context = "\n\n".join(
         f"[{c['doc_number']} Rev.{c['revision']} — {c['section']}]\n{c['text']}"
         for c in relevant
+    )
+    email_context = "\n\n".join(
+        f"[Email — {c['sender']} — {c['revision']}]\n{c['text']}"
+        for c in email_chunks
+    )
+    context = spec_context
+    if email_context:
+        context += f"\n\n{email_context}"
+
+    email_rule = (
+        "\n- Excerpts starting with [Email — ...] are from project emails — "
+        "cite them using that exact format."
+        if email_chunks else ""
     )
 
     prompt = f"""You are a Fire and Gas (F&G) engineering assistant. Answer based strictly on the excerpts below.
@@ -298,9 +321,9 @@ Rules:
 - Each excerpt starts with [DOC REV — SECTION]. Use that as the citation in your answer.
 - If a question asks about a quantity (temperature, pressure, distance, time), a numeric value with a unit (e.g. 135°F, 20% LEL, 10 ppm) IS the answer — report it directly.
 - If the answer is genuinely not in the excerpts, say "Not found in the provided specifications." Do not guess.
-- Be direct. List set points or thresholds as bullet points.
+- Be direct. List set points or thresholds as bullet points.{email_rule}
 
-SPECIFICATION EXCERPTS (most relevant first):
+EXCERPTS (most relevant first):
 {context}
 
 QUESTION: {question}
@@ -310,6 +333,15 @@ ANSWER:"""
     # Send all retrieved chunks as candidates; frontend filters to what the model actually cited
     seen_sections = set()
     sources = []
+    for c in email_chunks:
+        key = ("Email", c["section"])
+        if key not in seen_sections:
+            seen_sections.add(key)
+            sources.append({
+                "filename": "", "doc_number": "Email",
+                "title": c["sender"], "revision": c["revision"],
+                "section": c["section"], "page": 0, "is_email": True,
+            })
     for c in relevant:
         key = (c["doc_number"], c["section"])
         if key not in seen_sections:
