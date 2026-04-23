@@ -303,10 +303,10 @@ QUESTION: {question}
 
 ANSWER:"""
 
-    # Show top 3 sources, deduplicated by section — all retrieved chunks listed in log
+    # Send all retrieved chunks as candidates; frontend filters to what the model actually cited
     seen_sections = set()
     sources = []
-    for c in relevant[:3]:
+    for c in relevant:
         key = (c["doc_number"], c["section"])
         if key not in seen_sections:
             seen_sections.add(key)

@@ -528,11 +528,28 @@
     // --- Q&A streaming ---
     function renderSources(sources) {
       const sourcesBox = document.getElementById("sourcesBox");
-      const unique = [...new Map(sources.map(s => [s.doc_number + s.section, s])).values()];
-      sourcesBox.innerHTML = unique.length
-        ? `<div class="sources-label">Sources</div>` + unique.map(s =>
+      sourcesBox.innerHTML = sources.length
+        ? `<div class="sources-label">Sources</div>` + sources.map(s =>
             `<a class="source-tag" href="/pdf/${encodeURIComponent(s.filename)}#page=${s.page}" target="_blank"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section} p.${s.page}</a>`).join("")
         : "";
+    }
+
+    // Parse answer text for [DOC Rev.X — SECTION] citation patterns and return matching candidates.
+    // Falls back to all candidates if nothing matches (e.g. model omitted citations).
+    function filterCited(text, candidates) {
+      const cited = [], seen = new Set();
+      for (const m of text.matchAll(/\[([^\]]+)\]/g)) {
+        const inner = m[1];
+        if (!inner.includes(" — ")) continue;
+        for (const c of candidates) {
+          const key = c.doc_number + c.section;
+          if (!seen.has(key) && inner.includes(c.doc_number) && inner.includes(c.section)) {
+            seen.add(key);
+            cited.push(c);
+          }
+        }
+      }
+      return cited.length ? cited : candidates;
     }
 
     async function deleteSpec(filename, btn) {
@@ -558,7 +575,7 @@
       answerBox.textContent = "Waiting for first token...";
       sourcesBox.innerHTML = "";
 
-      let fullText = "", thinkText = "", firstToken = true, firstThink = true;
+      let fullText = "", thinkText = "", firstToken = true, firstThink = true, sourceCandidates = [];
       const tStart = performance.now();
 
       try {
@@ -589,7 +606,7 @@
             try {
               const obj = JSON.parse(data);
               if (event === "sources") {
-                renderSources(obj);
+                sourceCandidates = obj;
               } else if (event === "thinking") {
                 if (firstThink) firstThink = false;
                 thinkText += obj.t;
@@ -604,6 +621,7 @@
                 fullText += obj.t;
                 answerBox.innerHTML = marked.parse(fullText);
               } else if (event === "done") {
+                renderSources(filterCited(fullText, sourceCandidates));
                 setStatus("queryStatus", "ok", `Done in ${obj.elapsed.toFixed(1)}s`);
               } else if (event === "error") {
                 setStatus("queryStatus", "error", obj.error);
