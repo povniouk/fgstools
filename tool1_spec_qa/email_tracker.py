@@ -17,12 +17,12 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 # Shared with app.py current_model dict after registration — set by app.py
 _current_model = {"name": os.environ.get("OLLAMA_MODEL", "gemma4:latest")}
 
-DISCIPLINES = ["HSED HOC", "HSED BoOC", "Civil", "Piping", "Electrical",
-               "Structural", "Vendor", "Other"]
+DISCIPLINES = ["HSED", "ICST", "Electrical", "HVAC", "Telecom", "Instrumentation", "Other"]
+SCOPES     = ["SPI", "C&E", "FGS Layouts", "Document Review", "Interface", "General", "Other"]
 CATEGORIES = ["Comment response", "IFR submittal", "Technical query",
-              "Information request", "Meeting action", "Blocking point"]
+              "Information request", "Meeting action"]
 PRIORITIES = ["Low", "Medium", "High", "Critical"]
-STATUSES = ["Open", "In Progress", "Closed"]
+STATUSES   = ["Open", "In Progress", "Closed"]
 
 
 def get_db():
@@ -44,21 +44,28 @@ def init_db():
             imported_at TEXT
         );
         CREATE TABLE IF NOT EXISTS action_items (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            email_id      INTEGER,
-            discipline    TEXT    DEFAULT '',
-            document_ref  TEXT    DEFAULT '',
-            action        TEXT    DEFAULT '',
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_id       INTEGER,
+            discipline     TEXT    DEFAULT '',
+            scope          TEXT    DEFAULT '',
+            document_ref   TEXT    DEFAULT '',
+            action         TEXT    DEFAULT '',
             blocking_point INTEGER DEFAULT 0,
-            deadline      TEXT    DEFAULT '',
-            category      TEXT    DEFAULT '',
-            priority      TEXT    DEFAULT 'Medium',
-            status        TEXT    DEFAULT 'Open',
-            notes         TEXT    DEFAULT '',
-            created_at    TEXT,
+            deadline       TEXT    DEFAULT '',
+            category       TEXT    DEFAULT '',
+            priority       TEXT    DEFAULT 'Medium',
+            status         TEXT    DEFAULT 'Open',
+            notes          TEXT    DEFAULT '',
+            created_at     TEXT,
             FOREIGN KEY (email_id) REFERENCES emails(id)
         );
     """)
+    # M2 migration: add scope column for existing databases
+    try:
+        conn.execute("ALTER TABLE action_items ADD COLUMN scope TEXT DEFAULT ''")
+        conn.commit()
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -138,18 +145,18 @@ Extract EVERY item that requires any attention or follow-up from this project em
 For each numbered or bulleted point in the email body, ask: does this require any action? If yes, include it.
 
 Return a JSON array where each element has exactly these fields:
-- "discipline": team who sent or owns this (one of: "HSED HOC", "HSED BoOC", "Civil", "Piping", "Electrical", "Structural", "Vendor", "Other")
-- "document_ref": document number or name if mentioned, else ""
+- "discipline": team who sent or owns this (one of: "HSED", "ICST", "Electrical", "HVAC", "Telecom", "Instrumentation", "Other")
+- "scope": area of work this relates to (one of: "SPI", "C&E", "FGS Layouts", "Document Review", "Interface", "General", "Other")
 - "action": one clear sentence — what needs to happen
 - "blocking_point": true only if this explicitly blocks progress, else false
 - "deadline": date as YYYY-MM-DD if mentioned, else ""
-- "category": exactly one of ["Comment response", "IFR submittal", "Technical query", "Information request", "Meeting action", "Blocking point"]
+- "category": exactly one of ["Comment response", "IFR submittal", "Technical query", "Information request", "Meeting action"]
 - "priority": exactly one of ["Low", "Medium", "High", "Critical"]
 
 EXAMPLE — for an email saying "Please read the FGS Spec. Jason LeBlanc is the PIC for FGS design.":
 [
-  {{"discipline": "Other", "document_ref": "FGS Spec", "action": "Read and familiarise with FGS Specification", "blocking_point": false, "deadline": "", "category": "Information request", "priority": "Medium"}},
-  {{"discipline": "HSED HOC", "document_ref": "", "action": "Note: Jason LeBlanc is PIC for FGS design — establish contact", "blocking_point": false, "deadline": "", "category": "Information request", "priority": "Low"}}
+  {{"discipline": "HSED", "scope": "Document Review", "action": "Read and familiarise with FGS Specification", "blocking_point": false, "deadline": "", "category": "Information request", "priority": "Medium"}},
+  {{"discipline": "HSED", "scope": "Interface", "action": "Note: Jason LeBlanc is PIC for FGS design — establish contact", "blocking_point": false, "deadline": "", "category": "Information request", "priority": "Low"}}
 ]
 
 Return ONLY a valid JSON array. No explanation, no markdown fences, no other text.
@@ -259,12 +266,12 @@ def approve_items():
     for item in items:
         conn.execute(
             "INSERT INTO action_items "
-            "(email_id, discipline, document_ref, action, blocking_point, "
+            "(email_id, discipline, scope, action, blocking_point, "
             " deadline, category, priority, status, notes, created_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (email_id,
              item.get("discipline", ""),
-             item.get("document_ref", ""),
+             item.get("scope", ""),
              item.get("action", ""),
              1 if item.get("blocking_point") else 0,
              item.get("deadline", ""),
