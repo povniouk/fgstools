@@ -425,6 +425,11 @@ def get_register():
     conn = get_db()
     rows = [dict(r) for r in conn.execute(query, params).fetchall()]
     conn.close()
+    for row in rows:
+        try:
+            row["notes"] = json.loads(row["notes"]) if row["notes"] else []
+        except Exception:
+            row["notes"] = []
     return jsonify({"items": rows})
 
 
@@ -444,6 +449,27 @@ def update_item(item_id):
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+@bp.route("/api/email/items/<int:item_id>/notes", methods=["POST"])
+def add_note(item_id):
+    text = (request.json or {}).get("text", "").strip()
+    if not text:
+        return jsonify({"error": "Note text required"}), 400
+    conn = get_db()
+    row = conn.execute("SELECT notes FROM action_items WHERE id=?", (item_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Not found"}), 404
+    try:
+        notes = json.loads(row["notes"]) if row["notes"] else []
+    except Exception:
+        notes = []
+    notes.append({"ts": datetime.datetime.now().isoformat(), "text": text})
+    conn.execute("UPDATE action_items SET notes=? WHERE id=?", (json.dumps(notes), item_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "notes": notes})
 
 
 @bp.route("/api/email/items/<int:item_id>/status", methods=["PUT"])
