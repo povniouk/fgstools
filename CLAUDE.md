@@ -223,7 +223,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Listed in panel with filename + upload date; click to download
 - Close action button: sets status to Closed, records timestamp in notes log
 
-**M7 — Email as project memory (RAG integration)**
+**M7 — Email as project memory (RAG integration)** ✅ DONE
 - Cleaned email bodies chunked and embedded alongside spec chunks in the retrieval pool
 - Each email chunk tagged with sender, date, discipline (cites as `[Email — Sender, Date]`)
 - Q&A tool searches specs + email history simultaneously
@@ -353,7 +353,7 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [ ] Tool 5 M4 — Side detail / edit panel
 - [ ] Tool 5 M5 — Append-only notes log per item
 - [ ] Tool 5 M6 — File attachments per action item
-- [ ] Tool 5 M7 — Email as project memory (RAG integration with Q&A)
+- [x] Tool 5 M7 — Email as project memory (RAG integration with Q&A)
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
 - [ ] Tool 4 (Revision Delta Tracker) — not started
