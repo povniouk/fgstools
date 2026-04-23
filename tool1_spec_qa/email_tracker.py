@@ -467,6 +467,7 @@ def upload_email():
         conn.close()
         return jsonify({
             "duplicate": True,
+            "email_id": existing["id"],
             "imported_at": existing["imported_at"],
             "sender": sender,
             "subject": subject,
