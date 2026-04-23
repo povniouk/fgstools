@@ -434,7 +434,8 @@
       const res = await fetch("/api/models");
       const data = await res.json();
       const select = document.getElementById("modelSelect");
-      select.innerHTML = data.models.map(m =>
+      const chatModels = data.models.filter(m => !m.startsWith("nomic-embed") && !m.includes("embed"));
+      select.innerHTML = chatModels.map(m =>
         `<option value="${m}" ${m === data.current ? "selected" : ""}>${m}</option>`
       ).join("");
       document.getElementById("modelActive").textContent = "active: " + data.current;
@@ -640,7 +641,7 @@
     }
 
     document.getElementById("questionInput").addEventListener("keydown", function(e) {
-      if (e.key === "Enter" && e.ctrlKey) askQuestion();
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askQuestion(); }
     });
 
     // --- Chunk inspector (Admin tab) ---
