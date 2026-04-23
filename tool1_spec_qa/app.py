@@ -12,10 +12,6 @@ import retriever as _retriever
 
 app = Flask(__name__, static_folder="static")
 
-import email_tracker as _email_tracker
-app.register_blueprint(_email_tracker.bp)
-_email_tracker._current_model = current_model  # share live model reference
-
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:latest")
 SPECS_DIR = os.environ.get("SPECS_DIR", "specs")
@@ -25,6 +21,10 @@ NUM_PREDICT = int(os.environ.get("NUM_PREDICT", "1024"))
 MAX_THINK_CHARS = int(os.environ.get("MAX_THINK_CHARS", "6000"))
 
 current_model = {"name": MODEL, "think": False}
+
+import email_tracker as _email_tracker
+app.register_blueprint(_email_tracker.bp)
+_email_tracker._current_model = current_model  # share live model reference
 
 # Log buffer — keeps last 200 entries, streams to connected clients
 _log_buffer = deque(maxlen=200)
