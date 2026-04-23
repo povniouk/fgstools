@@ -164,19 +164,30 @@ BODY:
 JSON:"""
 
     try:
-        res = requests.post(
+        # stream=True required — gemma4 returns empty response with stream=False
+        with requests.post(
             f"{OLLAMA_URL}/api/generate",
             json={
                 "model": _current_model["name"],
                 "prompt": prompt,
-                "stream": False,
+                "stream": True,
+                "think": False,
                 "options": {"temperature": 0.1, "num_predict": 1024, "top_p": 0.9},
             },
+            stream=True,
             timeout=120,
-        )
-        res.raise_for_status()
-        text = res.json().get("response", "").strip()
-        match = re.search(r'\[.*?\]', text, re.DOTALL)
+        ) as res:
+            res.raise_for_status()
+            text = ""
+            for raw in res.iter_lines(decode_unicode=True):
+                if not raw:
+                    continue
+                obj = json.loads(raw)
+                text += obj.get("response", "")
+                if obj.get("done"):
+                    break
+        text = text.strip()
+        match = re.search(r'\[.*\]', text, re.DOTALL)
         if match:
             items = json.loads(match.group())
             if isinstance(items, list):
