@@ -465,6 +465,12 @@
         <p style="font-size:0.85rem;color:#555;">Restart and update controls will be added here once the admin API is wired up.</p>
       </div>
       <div class="section">
+        <h2>Email Memory</h2>
+        <p style="font-size:0.85rem;color:#858585;margin-bottom:12px;">Re-index all emails in the database for use with the Email history toggle in Spec Q&amp;A. Runs in the background — check the Output log for progress.</p>
+        <button class="btn-save" onclick="reindexEmails()" id="reindexBtn">Re-index all emails</button>
+        <div class="status" id="reindexStatus" style="margin-top:8px;"></div>
+      </div>
+      <div class="section">
         <h2>Logs</h2>
         <p style="font-size:0.85rem;color:#858585;">Use the Output panel at the bottom of the screen to view live app logs. On the LXC, full logs are available via: <code style="color:#ce9178">journalctl -u fgstools -f</code></p>
       </div>
@@ -1420,6 +1426,22 @@
       e.preventDefault(); attachDrop.style.borderColor = "#3c3c3c";
       [...e.dataTransfer.files].forEach(f => uploadAttachment(f));
     });
+
+    // --- Admin actions ---
+    async function reindexEmails() {
+      const btn = document.getElementById("reindexBtn");
+      btn.disabled = true;
+      setStatus("reindexStatus", "", '<span class="spinner"></span>Indexing in background...');
+      try {
+        const res = await fetch("/api/email/reindex", { method: "POST" });
+        const data = await res.json();
+        setStatus("reindexStatus", "ok",
+          `Started — ${data.emails} email(s) queued. Watch the Output log for progress.`);
+      } catch {
+        setStatus("reindexStatus", "error", "Failed to start re-index.");
+      }
+      btn.disabled = false;
+    }
 
     // --- Chunk inspector (Admin tab) ---
     async function populateDebugSpecSelect() {

@@ -635,6 +635,27 @@ def delete_item(item_id):
     return jsonify({"ok": True})
 
 
+@bp.route("/api/email/reindex", methods=["POST"])
+def reindex_all():
+    """Re-index all emails in the DB. Runs in background; returns immediately."""
+    conn = get_db()
+    emails = conn.execute("SELECT id, body_text, sender, sent_date FROM emails").fetchall()
+    conn.close()
+
+    def _run():
+        for row in emails:
+            # Use discipline from the first approved action item for this email
+            c = get_db().execute(
+                "SELECT discipline FROM action_items WHERE email_id=? LIMIT 1", (row["id"],)
+            ).fetchone()
+            discipline = c["discipline"] if c else ""
+            _index_email_body(row["id"], row["body_text"], row["sender"],
+                              row["sent_date"], discipline)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"ok": True, "emails": len(emails)})
+
+
 # --- Contacts ---
 
 @bp.route("/api/email/contacts", methods=["GET"])
