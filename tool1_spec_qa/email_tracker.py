@@ -8,12 +8,13 @@ import requests
 import email as email_lib
 from email import policy as email_policy
 from email.utils import parseaddr
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_from_directory
 
 bp = Blueprint("email_tracker", __name__)
 
-DB_PATH = os.environ.get("DB_PATH", "cwlng.db")
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+DB_PATH        = os.environ.get("DB_PATH", "cwlng.db")
+OLLAMA_URL     = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+ATTACHMENTS_DIR = os.environ.get("ATTACHMENTS_DIR", "attachments")
 
 # Shared with app.py current_model dict after registration — set by app.py
 _current_model = {"name": os.environ.get("OLLAMA_MODEL", "gemma4:latest")}
@@ -62,6 +63,14 @@ def init_db():
         );
     """)
     conn.executescript("""
+        CREATE TABLE IF NOT EXISTS attachments (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id       INTEGER,
+            filename      TEXT,
+            original_name TEXT,
+            uploaded_at   TEXT,
+            FOREIGN KEY (item_id) REFERENCES action_items(id)
+        );
         CREATE TABLE IF NOT EXISTS contacts (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
             name             TEXT DEFAULT '',
@@ -75,6 +84,7 @@ def init_db():
             updated_at       TEXT
         );
     """)
+    os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
     # Migrations for existing databases
     for col in [
         "ALTER TABLE action_items ADD COLUMN scope TEXT DEFAULT ''",
@@ -546,5 +556,67 @@ def delete_contact_route(contact_id):
     conn = get_db()
     conn.execute("DELETE FROM contacts WHERE id=?", (contact_id,))
     conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+# --- Attachments ---
+
+@bp.route("/api/email/items/<int:item_id>/attachments", methods=["GET"])
+def list_attachments(item_id):
+    conn = get_db()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT * FROM attachments WHERE item_id=? ORDER BY uploaded_at DESC", (item_id,)
+    ).fetchall()]
+    conn.close()
+    return jsonify({"attachments": rows})
+
+
+@bp.route("/api/email/items/<int:item_id>/attachments", methods=["POST"])
+def upload_attachment(item_id):
+    if "file" not in request.files:
+        return jsonify({"error": "No file"}), 400
+    f = request.files["file"]
+    original_name = f.filename
+    safe_name = re.sub(r'[^\w.\-]', '_', original_name)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{ts}_{safe_name}"
+    item_dir = os.path.join(ATTACHMENTS_DIR, str(item_id))
+    os.makedirs(item_dir, exist_ok=True)
+    f.save(os.path.join(item_dir, filename))
+    now = datetime.datetime.now().isoformat()
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO attachments (item_id, filename, original_name, uploaded_at) VALUES (?,?,?,?)",
+        (item_id, filename, original_name, now),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "id": cur.lastrowid,
+                    "filename": filename, "original_name": original_name, "uploaded_at": now})
+
+
+@bp.route("/api/attachments/<int:attachment_id>")
+def download_attachment(attachment_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM attachments WHERE id=?", (attachment_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    item_dir = os.path.abspath(os.path.join(ATTACHMENTS_DIR, str(row["item_id"])))
+    return send_from_directory(item_dir, row["filename"],
+                               as_attachment=True, download_name=row["original_name"])
+
+
+@bp.route("/api/attachments/<int:attachment_id>", methods=["DELETE"])
+def delete_attachment_route(attachment_id):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM attachments WHERE id=?", (attachment_id,)).fetchone()
+    if row:
+        path = os.path.join(ATTACHMENTS_DIR, str(row["item_id"]), row["filename"])
+        if os.path.exists(path):
+            os.remove(path)
+        conn.execute("DELETE FROM attachments WHERE id=?", (attachment_id,))
+        conn.commit()
     conn.close()
     return jsonify({"ok": True})

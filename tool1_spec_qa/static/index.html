@@ -124,6 +124,14 @@
     .panel-field input:focus, .panel-field select:focus, .panel-field textarea:focus { outline: none; border-color: #007acc; }
     .panel-field textarea { resize: vertical; min-height: 90px; }
     .panel-meta { font-size: 0.78rem; color: #858585; background: #1e1e1e; border-radius: 3px; padding: 9px 11px; line-height: 1.7; }
+    .attach-drop { border: 1px dashed #3c3c3c; border-radius: 2px; padding: 10px; text-align: center; cursor: pointer; font-size: 0.8rem; color: #555; transition: border-color 0.15s; }
+    .attach-drop:hover { border-color: #007acc; color: #858585; }
+    .attach-list { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+    .attach-row { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; padding: 3px 0; border-bottom: 1px solid #2a2a2a; }
+    .attach-row:last-child { border-bottom: none; }
+    .attach-name { color: #9cdcfe; text-decoration: none; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .attach-name:hover { text-decoration: underline; }
+    .attach-date { color: #555; font-size: 0.72rem; flex-shrink: 0; }
     .notes-log { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 2px; max-height: 200px; overflow-y: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
     .note-entry { border-bottom: 1px solid #2a2a2a; padding-bottom: 8px; }
     .note-entry:last-child { border-bottom: none; padding-bottom: 0; }
@@ -525,6 +533,15 @@
         </div>
       </div>
       <div class="panel-field" style="margin-top:4px;">
+        <label>Attachments</label>
+        <div id="attachDrop" class="attach-drop">
+          Click or drop files here — PNG, PDF, DOC, EML…
+          <input type="file" id="attachInput" multiple style="display:none"
+                 onchange="[...this.files].forEach(f => uploadAttachment(f)); this.value=''">
+        </div>
+        <div id="panelAttachments" class="attach-list"></div>
+      </div>
+      <div class="panel-field" style="margin-top:4px;">
         <label>Notes Log</label>
         <div class="notes-log" id="panelNotesLog">
           <span style="color:#555;font-size:0.82rem;">No notes yet.</span>
@@ -535,6 +552,7 @@
     </div>
     <div class="sp-footer">
       <button onclick="saveItemPanel()" style="flex:1;">Save</button>
+      <button onclick="closeAction()" style="background:#1a3a1a;border:1px solid #2a5a2a;color:#4ec9b0;padding:8px 12px;border-radius:2px;cursor:pointer;font-size:0.85rem;white-space:nowrap;">✓ Close</button>
       <button class="btn-del" onclick="deleteItemFromPanel()" style="padding:8px 16px;">Delete</button>
     </div>
   </div>
@@ -1198,6 +1216,7 @@
       const notes = Array.isArray(item.notes) ? item.notes : (item.notes ? JSON.parse(item.notes) : []);
       renderNotes(notes);
       document.getElementById("panelNoteInput").value = "";
+      loadAttachments(id);
       document.getElementById("sidePanel").classList.add("open");
       document.getElementById("sidePanelBackdrop").classList.add("open");
     }
@@ -1274,6 +1293,88 @@
     }
 
     document.addEventListener("keydown", e => { if (e.key === "Escape") closeItemPanel(); });
+
+    // --- Attachments ---
+    async function loadAttachments(itemId) {
+      const res = await fetch(`/api/email/items/${itemId}/attachments`);
+      const data = await res.json();
+      renderAttachments(data.attachments || []);
+    }
+
+    function fileIcon(name) {
+      const ext = (name.split('.').pop() || '').toLowerCase();
+      if (['png','jpg','jpeg','gif','bmp'].includes(ext)) return '🖼';
+      if (ext === 'pdf') return '📄';
+      if (['doc','docx'].includes(ext)) return '📝';
+      if (['xls','xlsx'].includes(ext)) return '📊';
+      if (['eml','msg'].includes(ext)) return '📧';
+      return '📎';
+    }
+
+    function renderAttachments(attachments) {
+      const box = document.getElementById("panelAttachments");
+      if (!attachments.length) {
+        box.innerHTML = '<span style="color:#555;font-size:0.78rem;">No attachments.</span>';
+        return;
+      }
+      box.innerHTML = attachments.map(a => `
+        <div class="attach-row">
+          <span>${fileIcon(a.original_name)}</span>
+          <a class="attach-name" href="/api/attachments/${a.id}" target="_blank"
+             title="${escHtml(a.original_name)}">${escHtml(a.original_name)}</a>
+          <span class="attach-date">${a.uploaded_at.slice(0,10)}</span>
+          <button class="btn-del" style="padding:1px 6px;font-size:0.7rem;flex-shrink:0;"
+                  onclick="deleteAttachment(${a.id})">×</button>
+        </div>`).join('');
+    }
+
+    async function uploadAttachment(file) {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/email/items/${_panelItemId}/attachments`, {
+        method: "POST", body: fd
+      });
+      const data = await res.json();
+      if (data.ok) loadAttachments(_panelItemId);
+    }
+
+    async function deleteAttachment(id) {
+      if (!confirm("Delete this attachment?")) return;
+      await fetch(`/api/attachments/${id}`, { method: "DELETE" });
+      loadAttachments(_panelItemId);
+    }
+
+    async function closeAction() {
+      if (!_panelItemId) return;
+      await fetch(`/api/email/items/${_panelItemId}/notes`, {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ text: "Action closed." })
+      });
+      await fetch(`/api/email/items/${_panelItemId}`, {
+        method: "PUT", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          action:         document.getElementById("panelAction").value.trim(),
+          discipline:     document.getElementById("panelDiscipline").value,
+          scope:          document.getElementById("panelScope").value,
+          priority:       document.getElementById("panelPriority").value,
+          status:         "Closed",
+          deadline:       document.getElementById("panelDeadline").value,
+          blocking_point: document.getElementById("panelBlocking").checked,
+        })
+      });
+      closeItemPanel();
+      loadRegister();
+    }
+
+    // Attachment drop zone setup
+    const attachDrop = document.getElementById("attachDrop");
+    attachDrop.addEventListener("click", () => document.getElementById("attachInput").click());
+    attachDrop.addEventListener("dragover", e => { e.preventDefault(); attachDrop.style.borderColor = "#007acc"; });
+    attachDrop.addEventListener("dragleave", () => { attachDrop.style.borderColor = "#3c3c3c"; });
+    attachDrop.addEventListener("drop", e => {
+      e.preventDefault(); attachDrop.style.borderColor = "#3c3c3c";
+      [...e.dataTransfer.files].forEach(f => uploadAttachment(f));
+    });
 
     // --- Chunk inspector (Admin tab) ---
     async function populateDebugSpecSelect() {
