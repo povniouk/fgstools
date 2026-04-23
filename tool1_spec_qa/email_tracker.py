@@ -79,6 +79,23 @@ def strip_html(html):
     return text.strip()
 
 
+def clean_body(text):
+    """Remove URL artifacts and email signature noise from parsed body text."""
+    # Strip file:// / http:// / mailto: URLs that appear in angle brackets (Outlook plain-text links)
+    text = re.sub(r'<(?:file|https?|mailto)[^>]*>', '', text)
+    # Strip bare URLs
+    text = re.sub(r'https?://\S+', '', text)
+    # Strip [cid:...] inline image references
+    text = re.sub(r'\[cid:[^\]]*\]', '', text)
+    # Strip Windows UNC/share paths — long noise from Outlook shared folders
+    text = re.sub(r'\\\\[^\s]+', '', text)
+    # Strip lines that are only a Windows path (H:\ or similar) after the above
+    text = re.sub(r'^[A-Z]:\\[^\n]*$', '', text, flags=re.MULTILINE)
+    # Collapse blank lines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
 def parse_eml(path):
     with open(path, "rb") as f:
         msg = email_lib.message_from_binary_file(f, policy=email_policy.default)
@@ -91,7 +108,7 @@ def parse_eml(path):
         content = body_part.get_content()
         if body_part.get_content_type() == "text/html":
             content = strip_html(content)
-        body_text = content.strip()
+        body_text = clean_body(content)
     return sender, subject, date_str, body_text
 
 
@@ -105,24 +122,38 @@ def parse_msg(path):
     if isinstance(html_body, bytes):
         html_body = html_body.decode("utf-8", errors="replace")
     body_text = strip_html(html_body) if html_body else str(msg.body or "")
-    return sender, subject, date_str, body_text
+    return sender, subject, date_str, clean_body(body_text)
 
 
 def extract_items(body_text, subject, sender):
-    prompt = f"""You are an assistant helping a Fire & Gas control systems engineer on a greenfield LNG EPC project.
+    prompt = f"""You are an assistant tracking action items for a Fire & Gas control systems engineer on a greenfield LNG EPC project.
 
-Extract ALL action items, deliverables, technical queries, or blocking points from the project email below.
-Return a JSON array. Each element must have exactly these fields:
+Extract EVERY item that requires any attention or follow-up from this project email. Cast a wide net — include:
+- Tasks and deliverables ("submit X by date Y", "issue document Z")
+- Read / review / familiarise requests ("please read spec X", "familiarise yourself with Y")
+- People or roles to note or contact ("X is the PIC for Y", "coordinate with Z")
+- Technical queries or open questions needing a response
+- Blocking points or dependencies
+
+For each numbered or bulleted point in the email body, ask: does this require any action? If yes, include it.
+
+Return a JSON array where each element has exactly these fields:
 - "discipline": team who sent or owns this (one of: "HSED HOC", "HSED BoOC", "Civil", "Piping", "Electrical", "Structural", "Vendor", "Other")
 - "document_ref": document number or name if mentioned, else ""
-- "action": clear one-sentence description of what needs to happen
-- "blocking_point": true if this explicitly blocks progress, false otherwise
-- "deadline": date in YYYY-MM-DD if mentioned, else ""
+- "action": one clear sentence — what needs to happen
+- "blocking_point": true only if this explicitly blocks progress, else false
+- "deadline": date as YYYY-MM-DD if mentioned, else ""
 - "category": exactly one of ["Comment response", "IFR submittal", "Technical query", "Information request", "Meeting action", "Blocking point"]
 - "priority": exactly one of ["Low", "Medium", "High", "Critical"]
 
-If there are no action items, return [].
+EXAMPLE — for an email saying "Please read the FGS Spec. Jason LeBlanc is the PIC for FGS design.":
+[
+  {{"discipline": "Other", "document_ref": "FGS Spec", "action": "Read and familiarise with FGS Specification", "blocking_point": false, "deadline": "", "category": "Information request", "priority": "Medium"}},
+  {{"discipline": "HSED HOC", "document_ref": "", "action": "Note: Jason LeBlanc is PIC for FGS design — establish contact", "blocking_point": false, "deadline": "", "category": "Information request", "priority": "Low"}}
+]
+
 Return ONLY a valid JSON array. No explanation, no markdown fences, no other text.
+If the email has no actionable content at all, return [].
 
 EMAIL SUBJECT: {subject}
 FROM: {sender}
