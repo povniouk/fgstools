@@ -325,6 +325,24 @@ def upload_email():
         os.remove(tmp_path)
 
     conn = get_db()
+    # Duplicate check — same sender + subject + date = same email
+    existing = conn.execute(
+        "SELECT id, imported_at FROM emails WHERE sender=? AND subject=? AND sent_date=?",
+        (sender, subject, sent_date)
+    ).fetchone()
+    if existing:
+        # Still upsert contact (idempotent) but skip action extraction
+        contact = extract_contact(body_text, sender)
+        upsert_contact(conn, contact, source="auto")
+        conn.commit()
+        conn.close()
+        return jsonify({
+            "duplicate": True,
+            "imported_at": existing["imported_at"],
+            "sender": sender,
+            "subject": subject,
+        })
+
     cur = conn.execute(
         "INSERT INTO emails (filename, sender, subject, sent_date, body_text, imported_at) "
         "VALUES (?,?,?,?,?,?)",

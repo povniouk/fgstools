@@ -144,6 +144,7 @@
     .status { font-size: 0.8rem; color: #858585; margin-top: 8px; min-height: 18px; }
     .status.error { color: #f44747; }
     .status.ok { color: #4ec9b0; }
+    .status.warn { color: #dcdcaa; }
 
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #3c3c3c; border-top-color: #007acc; border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -802,6 +803,11 @@
         const res = await fetch("/api/email/upload", { method: "POST", body: fd });
         const data = await res.json();
         if (data.error) { setStatus("emailUploadStatus", "error", data.error); return; }
+        if (data.duplicate) {
+          setStatus("emailUploadStatus", "warn",
+            `Already imported — "${data.subject}" from ${data.sender} (first imported ${data.imported_at.slice(0,10)}). No duplicates created.`);
+          return;
+        }
         _emailId = data.email_id;
         setStatus("emailUploadStatus", "ok",
           `Parsed "${file.name}" — ${data.items.length} item(s) extracted.`);
