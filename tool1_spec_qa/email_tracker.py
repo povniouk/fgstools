@@ -5,6 +5,8 @@ import datetime
 import sqlite3
 import tempfile
 import requests
+import email as email_lib
+from email import policy as email_policy
 from flask import Blueprint, request, jsonify
 
 bp = Blueprint("email_tracker", __name__)
@@ -77,6 +79,35 @@ def strip_html(html):
     return text.strip()
 
 
+def parse_eml(path):
+    with open(path, "rb") as f:
+        msg = email_lib.message_from_binary_file(f, policy=email_policy.default)
+    sender = str(msg.get("From", ""))
+    subject = str(msg.get("Subject", ""))
+    date_str = str(msg.get("Date", ""))
+    body_text = ""
+    body_part = msg.get_body(preferencelist=("plain", "html"))
+    if body_part:
+        content = body_part.get_content()
+        if body_part.get_content_type() == "text/html":
+            content = strip_html(content)
+        body_text = content.strip()
+    return sender, subject, date_str, body_text
+
+
+def parse_msg(path):
+    import extract_msg as emsg
+    msg = emsg.openMsg(path)
+    sender = str(msg.sender or "")
+    subject = str(msg.subject or "")
+    date_str = str(msg.date) if msg.date else ""
+    html_body = msg.htmlBody
+    if isinstance(html_body, bytes):
+        html_body = html_body.decode("utf-8", errors="replace")
+    body_text = strip_html(html_body) if html_body else str(msg.body or "")
+    return sender, subject, date_str, body_text
+
+
 def extract_items(body_text, subject, sender):
     prompt = f"""You are an assistant helping a Fire & Gas control systems engineer on a greenfield LNG EPC project.
 
@@ -129,29 +160,25 @@ def upload_email():
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
     f = request.files["file"]
-    if not f.filename.lower().endswith(".msg"):
-        return jsonify({"error": "Only .msg files are accepted"}), 400
+    fname_lower = f.filename.lower()
+    if not (fname_lower.endswith(".eml") or fname_lower.endswith(".msg")):
+        return jsonify({"error": "Only .eml or .msg files are accepted"}), 400
 
-    try:
-        import extract_msg as emsg
-    except ImportError:
-        return jsonify({"error": "extract-msg not installed — run: pip install extract-msg"}), 500
-
-    with tempfile.NamedTemporaryFile(suffix=".msg", delete=False) as tmp:
+    suffix = ".eml" if fname_lower.endswith(".eml") else ".msg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp_path = tmp.name
         f.save(tmp_path)
 
     try:
-        msg = emsg.openMsg(tmp_path)
-        sender = str(msg.sender or "")
-        subject = str(msg.subject or "")
-        sent_date = str(msg.date) if msg.date else ""
-        html_body = msg.htmlBody
-        if isinstance(html_body, bytes):
-            html_body = html_body.decode("utf-8", errors="replace")
-        body_text = strip_html(html_body) if html_body else str(msg.body or "")
+        if suffix == ".eml":
+            sender, subject, sent_date, body_text = parse_eml(tmp_path)
+        else:
+            try:
+                sender, subject, sent_date, body_text = parse_msg(tmp_path)
+            except ImportError:
+                return jsonify({"error": "extract-msg not installed — run: pip install extract-msg"}), 500
     except Exception as e:
-        return jsonify({"error": f"Failed to parse .msg: {e}"}), 400
+        return jsonify({"error": f"Failed to parse file: {e}"}), 400
     finally:
         os.remove(tmp_path)
 

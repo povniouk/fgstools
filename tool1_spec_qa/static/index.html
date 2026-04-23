@@ -312,9 +312,9 @@
         <div class="section">
           <h2>Drop Outlook Email</h2>
           <div id="emailDropZone">
-            <div style="color:#858585;font-size:0.9rem;">Drag a <strong style="color:#cccccc;">.msg file</strong> here from Windows Explorer or your Desktop, or click to select</div>
-            <div style="color:#555;font-size:0.78rem;margin-top:8px;">To get a .msg: drag the email from Outlook onto your Desktop first → then drag that file here</div>
-            <input type="file" id="emailFileInput" accept=".msg" style="display:none" onchange="uploadMsgFile(this.files[0])">
+            <div style="color:#858585;font-size:0.9rem;">Drag an <strong style="color:#cccccc;">.eml file</strong> here from Windows Explorer or your Desktop, or click to select</div>
+            <div style="color:#555;font-size:0.78rem;margin-top:8px;">To get an .eml: drag the email from Outlook onto your Desktop → then drag that file here. Also accepts .msg.</div>
+            <input type="file" id="emailFileInput" accept=".eml,.msg" style="display:none" onchange="uploadMsgFile(this.files[0])">
           </div>
           <div class="status" id="emailUploadStatus"></div>
         </div>
@@ -756,13 +756,14 @@
         uploadMsgFile(file);
       } else {
         setStatus("emailUploadStatus", "error",
-          "No file received. Drag the .msg from Windows Explorer or your Desktop — not directly from Outlook (Outlook uses a format browsers can't read). Save it to Desktop first.");
+          "No file received. Drag the .eml from Windows Explorer or your Desktop — not directly from Outlook. Drag the email to your Desktop first to create the file, then drag it here.");
       }
     });
 
     async function uploadMsgFile(file) {
-      if (!file.name.toLowerCase().endsWith(".msg")) {
-        setStatus("emailUploadStatus", "error", "Only .msg files are supported."); return;
+      const n = file.name.toLowerCase();
+      if (!n.endsWith(".eml") && !n.endsWith(".msg")) {
+        setStatus("emailUploadStatus", "error", "Only .eml or .msg files are supported."); return;
       }
       setStatus("emailUploadStatus", "", '<span class="spinner"></span>Parsing email and extracting action items...');
       document.getElementById("emailDraftSection").style.display = "none";
