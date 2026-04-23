@@ -7,6 +7,7 @@ import tempfile
 import requests
 import email as email_lib
 from email import policy as email_policy
+from email.utils import parseaddr
 from flask import Blueprint, request, jsonify
 
 bp = Blueprint("email_tracker", __name__)
@@ -60,12 +61,28 @@ def init_db():
             FOREIGN KEY (email_id) REFERENCES emails(id)
         );
     """)
-    # M2 migration: add scope column for existing databases
-    try:
-        conn.execute("ALTER TABLE action_items ADD COLUMN scope TEXT DEFAULT ''")
-        conn.commit()
-    except Exception:
-        pass
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS contacts (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            name             TEXT DEFAULT '',
+            email            TEXT DEFAULT '',
+            position         TEXT DEFAULT '',
+            operating_center TEXT DEFAULT '',
+            discipline       TEXT DEFAULT '',
+            notes            TEXT DEFAULT '',
+            source           TEXT DEFAULT 'manual',
+            created_at       TEXT,
+            updated_at       TEXT
+        );
+    """)
+    # Migrations for existing databases
+    for col in [
+        "ALTER TABLE action_items ADD COLUMN scope TEXT DEFAULT ''",
+    ]:
+        try:
+            conn.execute(col)
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -204,6 +221,82 @@ JSON:"""
     return []
 
 
+def extract_contact(body_text, sender):
+    """Extract position, operating center and discipline from email signature via Ollama."""
+    name, email_addr = parseaddr(sender)
+    signature = body_text[-800:] if len(body_text) > 800 else body_text
+    prompt = f"""Extract the sender's contact details from this project email.
+
+Return a JSON object with exactly these fields:
+- "name": sender's full name
+- "email": sender's email address
+- "position": job title (e.g. "ICSS Lead", "FGS Engineer", "Project Manager"), else ""
+- "operating_center": one of ["POC","HOC","BoOC","Owner","Vendor","Other"] (POC=Paris, HOC=Houston, BoOC=Bogota)
+- "discipline": one of ["HSED","ICST","Electrical","HVAC","Telecom","Instrumentation","Other"]
+
+FROM: {sender}
+EMAIL BODY (end — focus on signature):
+{signature}
+
+Return ONLY a valid JSON object. No markdown, no explanation.
+JSON:"""
+    try:
+        with requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={"model": _current_model["name"], "prompt": prompt, "stream": True,
+                  "think": False, "options": {"temperature": 0.1, "num_predict": 256}},
+            stream=True, timeout=60,
+        ) as res:
+            res.raise_for_status()
+            text = ""
+            for raw in res.iter_lines(decode_unicode=True):
+                if not raw:
+                    continue
+                obj = json.loads(raw)
+                text += obj.get("response", "")
+                if obj.get("done"):
+                    break
+        match = re.search(r'\{.*\}', text.strip(), re.DOTALL)
+        if match:
+            data = json.loads(match.group())
+            return {
+                "name": data.get("name", name),
+                "email": data.get("email", email_addr),
+                "position": data.get("position", ""),
+                "operating_center": data.get("operating_center", "Other"),
+                "discipline": data.get("discipline", "Other"),
+            }
+    except Exception as e:
+        print(f"[email_tracker] Contact extraction failed: {e}")
+    return {"name": name, "email": email_addr, "position": "", "operating_center": "Other", "discipline": "Other"}
+
+
+def upsert_contact(conn, contact, source="auto"):
+    """Insert contact or update only blank fields if already exists (preserves manual edits)."""
+    now = datetime.datetime.now().isoformat()
+    existing = conn.execute(
+        "SELECT id FROM contacts WHERE email=?", (contact["email"],)
+    ).fetchone()
+    if existing:
+        conn.execute("""
+            UPDATE contacts SET
+                name             = CASE WHEN name=''             THEN ? ELSE name END,
+                position         = CASE WHEN position=''         THEN ? ELSE position END,
+                operating_center = CASE WHEN operating_center='' THEN ? ELSE operating_center END,
+                discipline       = CASE WHEN discipline=''       THEN ? ELSE discipline END,
+                updated_at       = ?
+            WHERE email=?
+        """, (contact["name"], contact["position"], contact["operating_center"],
+               contact["discipline"], now, contact["email"]))
+    else:
+        conn.execute(
+            "INSERT INTO contacts (name, email, position, operating_center, discipline, source, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (contact["name"], contact["email"], contact["position"],
+             contact["operating_center"], contact["discipline"], source, now, now),
+        )
+
+
 @bp.route("/api/email/upload", methods=["POST"])
 def upload_email():
     if "file" not in request.files:
@@ -243,6 +336,13 @@ def upload_email():
     conn.close()
 
     items = extract_items(body_text, subject, sender)
+
+    # Auto-extract and upsert contact from sender signature
+    contact = extract_contact(body_text, sender)
+    conn = get_db()
+    upsert_contact(conn, contact, source="auto")
+    conn.commit()
+    conn.close()
 
     return jsonify({
         "email_id": email_id,
@@ -327,6 +427,62 @@ def update_status(item_id):
 def delete_item(item_id):
     conn = get_db()
     conn.execute("DELETE FROM action_items WHERE id=?", (item_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+# --- Contacts ---
+
+@bp.route("/api/email/contacts", methods=["GET"])
+def list_contacts():
+    conn = get_db()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT * FROM contacts ORDER BY name COLLATE NOCASE"
+    ).fetchall()]
+    conn.close()
+    return jsonify({"contacts": rows})
+
+
+@bp.route("/api/email/contacts", methods=["POST"])
+def create_contact():
+    data = request.json or {}
+    now = datetime.datetime.now().isoformat()
+    conn = get_db()
+    cur = conn.execute(
+        "INSERT INTO contacts (name, email, position, operating_center, discipline, notes, source, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (data.get("name", ""), data.get("email", ""), data.get("position", ""),
+         data.get("operating_center", ""), data.get("discipline", ""),
+         data.get("notes", ""), "manual", now, now),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "id": cur.lastrowid})
+
+
+@bp.route("/api/email/contacts/<int:contact_id>", methods=["PUT"])
+def update_contact(contact_id):
+    data = request.json or {}
+    now = datetime.datetime.now().isoformat()
+    conn = get_db()
+    conn.execute("""
+        UPDATE contacts SET
+            name=?, email=?, position=?, operating_center=?,
+            discipline=?, notes=?, updated_at=?
+        WHERE id=?
+    """, (data.get("name", ""), data.get("email", ""), data.get("position", ""),
+          data.get("operating_center", ""), data.get("discipline", ""),
+          data.get("notes", ""), now, contact_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/email/contacts/<int:contact_id>", methods=["DELETE"])
+def delete_contact_route(contact_id):
+    conn = get_db()
+    conn.execute("DELETE FROM contacts WHERE id=?", (contact_id,))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
