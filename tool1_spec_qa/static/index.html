@@ -915,8 +915,11 @@
         const data = await res.json();
         if (data.error) { setStatus("emailUploadStatus", "error", data.error); return; }
         if (data.duplicate) {
+          _emailId = data.email_id;
           setStatus("emailUploadStatus", "warn",
-            `Already imported — "${data.subject}" from ${data.sender} (first imported ${data.imported_at.slice(0,10)}). No duplicates created.`);
+            `Already imported — "${data.subject}" from ${data.sender} (${data.imported_at.slice(0,10)}).`
+            + ` <button class="btn-save" style="margin-left:8px;padding:3px 10px;font-size:0.78rem;"
+                onclick="reextractEmail(${data.email_id})">Re-extract items</button>`);
           return;
         }
         _emailId = data.email_id;
@@ -924,6 +927,19 @@
           `Parsed "${file.name}" — ${data.items.length} item(s) extracted.`);
         renderDraftCards(data);
       } catch { setStatus("emailUploadStatus", "error", "Upload failed. Check server logs."); }
+    }
+
+    async function reextractEmail(emailId) {
+      setStatus("emailUploadStatus", "", '<span class="spinner"></span>Re-extracting action items...');
+      document.getElementById("emailDraftSection").style.display = "none";
+      try {
+        const res = await fetch(`/api/email/${emailId}/reextract`, { method: "POST" });
+        const data = await res.json();
+        if (data.error) { setStatus("emailUploadStatus", "error", data.error); return; }
+        _emailId = data.email_id;
+        setStatus("emailUploadStatus", "ok", `Re-extracted ${data.items.length} item(s).`);
+        renderDraftCards(data);
+      } catch { setStatus("emailUploadStatus", "error", "Re-extraction failed."); }
     }
 
     const _DISC  = ["HSED","ICSS","Electrical","HVAC","Telecom","Instrumentation","Other"];

@@ -638,6 +638,25 @@ def delete_item(item_id):
     return jsonify({"ok": True})
 
 
+@bp.route("/api/email/<int:email_id>/reextract", methods=["POST"])
+def reextract(email_id):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT sender, subject, sent_date, body_text FROM emails WHERE id=?", (email_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Email not found"}), 404
+    items = extract_items(row["body_text"], row["subject"], row["sender"])
+    return jsonify({
+        "email_id": email_id,
+        "sender": row["sender"],
+        "subject": row["subject"],
+        "sent_date": row["sent_date"],
+        "items": items,
+    })
+
+
 @bp.route("/api/email/reindex", methods=["POST"])
 def reindex_all():
     """Re-index all emails in the DB. Runs in background; returns immediately."""
