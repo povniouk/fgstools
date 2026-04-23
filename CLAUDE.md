@@ -182,17 +182,26 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - SQLite tables: `emails`, `action_items`
 - Action register: filterable by status/discipline, inline status change, delete
 
-**M2 — Card + register field cleanup** ← NEXT
-- Simplify draft card to 5 fields: Action, Discipline, Scope, Priority, Deadline (blocking point as header checkbox only)
+**M2 — Card + register field cleanup** ✅ DONE
+- Simplified draft card to 5 fields: Action, Discipline, Scope, Priority, Deadline (blocking point as header checkbox only)
 - New discipline list: HSED, ICST, Electrical, HVAC, Telecom, Instrumentation, Other
-- Replace document_ref with Scope dropdown: SPI, C&E, FGS Layouts, Document Review, Interface, General, Other
-- Remove "Blocking point" from category list
-- Update Ollama extraction prompt to match new fields
+- Replaced document_ref with Scope dropdown: SPI, C&E, FGS Layouts, Document Review, Interface, General, Other
+- Removed "Blocking point" from category list
+- Updated Ollama extraction prompt to match new fields
 
-**M3 — Register table layout fix**
-- Slim table to 6 columns: Priority | Discipline | Action (truncated) | Scope | Deadline | Status
-- Remove delete button from table row (move to detail panel)
-- Click any row → open detail panel (M4)
+**M3 — Register table layout fix** ✅ DONE
+- Slimmed to 7 columns: Priority | Discipline | Action | Scope | Deadline | Status | ×
+- Added overflow-x:auto wrapper to prevent button overflow
+
+**M3.5 — Contacts directory** ← NEXT
+- New sub-tab in Email Tracker: Import | Action Register | **Contacts**
+- New DB table: `contacts (id, name, email, position, operating_center, discipline, notes, source, created_at, updated_at)`
+- **Operating centers:** POC (Paris), HOC (Houston), BoOC (Bogota), Owner, Vendor, Other
+- **Auto-extraction on email import:** Ollama extracts sender contact details (name, email, position, operating center) from the email signature in the same extraction call. Matched by email address — updates existing record rather than duplicating.
+- **Manual add/edit:** Form to add or edit contacts not coming from email
+- **Contact table view:** Name | Position | Operating Center | Discipline | Email
+- Click row → inline edit or simple modal
+- Future link to M4 side panel: "open actions from this person" count shown in contact row
 
 **M4 — Side detail / edit panel**
 - Click a register row → right-side panel slides in
@@ -338,8 +347,9 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [ ] Reranker service on gemma4 VM — files ready in `reranker/`, install instructions in session notes below
 - [ ] Wire fgstools retriever to call reranker at http://192.168.8.200:11435/rerank
 - [x] Tool 5 M1 — Email Tracker basic import + action register (`.eml`/`.msg`, Ollama extraction, draft cards, SQLite)
-- [ ] Tool 5 M2 — Card + register field cleanup (disciplines, scope dropdown, simplify form)
-- [ ] Tool 5 M3 — Register table layout fix (slim columns, click-to-open)
+- [x] Tool 5 M2 — Card + register field cleanup (disciplines, scope dropdown, simplify form)
+- [x] Tool 5 M3 — Register table layout fix (slim columns, overflow fixed)
+- [ ] Tool 5 M3.5 — Contacts directory (auto-extract from email signatures, manual add/edit, sub-tab)
 - [ ] Tool 5 M4 — Side detail / edit panel
 - [ ] Tool 5 M5 — Append-only notes log per item
 - [ ] Tool 5 M6 — File attachments per action item
