@@ -312,7 +312,8 @@
         <div class="section">
           <h2>Drop Outlook Email</h2>
           <div id="emailDropZone">
-            <div style="color:#858585;font-size:0.9rem;">Drag &amp; drop an Outlook .msg file here, or click to select</div>
+            <div style="color:#858585;font-size:0.9rem;">Drag a <strong style="color:#cccccc;">.msg file</strong> here from Windows Explorer or your Desktop, or click to select</div>
+            <div style="color:#555;font-size:0.78rem;margin-top:8px;">To get a .msg: drag the email from Outlook onto your Desktop first → then drag that file here</div>
             <input type="file" id="emailFileInput" accept=".msg" style="display:none" onchange="uploadMsgFile(this.files[0])">
           </div>
           <div class="status" id="emailUploadStatus"></div>
@@ -751,7 +752,12 @@
     emailDZ.addEventListener("drop", e => {
       e.preventDefault(); emailDZ.style.borderColor = "#3c3c3c";
       const file = e.dataTransfer.files[0];
-      if (file) uploadMsgFile(file);
+      if (file) {
+        uploadMsgFile(file);
+      } else {
+        setStatus("emailUploadStatus", "error",
+          "No file received. Drag the .msg from Windows Explorer or your Desktop — not directly from Outlook (Outlook uses a format browsers can't read). Save it to Desktop first.");
+      }
     });
 
     async function uploadMsgFile(file) {
