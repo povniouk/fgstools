@@ -21,6 +21,9 @@ ATTACHMENTS_DIR = os.environ.get("ATTACHMENTS_DIR", "attachments")
 # Shared with app.py current_model dict after registration — set by app.py
 _current_model = {"name": os.environ.get("OLLAMA_MODEL", "gemma4:latest")}
 
+# Log callback — app.py sets this to log_info so output reaches the browser log panel
+_log = print
+
 DISCIPLINES = ["HSED", "ICSS", "Electrical", "HVAC", "Telecom", "Instrumentation", "Other"]
 SCOPES     = ["SPI", "C&E", "FGS Layouts", "Document Review", "Interface", "General", "Other"]
 CATEGORIES = ["Comment response", "IFR submittal", "Technical query",
@@ -287,7 +290,7 @@ def _index_email_body(email_id, body_text, sender, sent_date, discipline):
             )
     conn.commit()
     conn.close()
-    print(f"[email_tracker] Indexed email {email_id}")
+    _log(f"[email memory] Indexed email {email_id} ({len(_chunk_text(clean_body(body_text)))} chunk(s))")
 
 
 def retrieve_email_chunks(question, top_k=3):
@@ -393,7 +396,7 @@ JSON:"""
                 "discipline": data.get("discipline", "Other"),
             }
     except Exception as e:
-        print(f"[email_tracker] Contact extraction failed: {e}")
+        _log(f"[email memory] Contact extraction failed: {e}")
     return {"name": name, "email": email_addr, "position": "", "operating_center": "Other", "discipline": "Other"}
 
 

@@ -26,6 +26,8 @@ import email_tracker as _email_tracker
 from email_tracker import retrieve_email_chunks
 app.register_blueprint(_email_tracker.bp)
 _email_tracker._current_model = current_model  # share live model reference
+# Route email_tracker log output to the browser log panel
+_email_tracker._log = log_info
 
 # Log buffer — keeps last 200 entries, streams to connected clients
 _log_buffer = deque(maxlen=200)
