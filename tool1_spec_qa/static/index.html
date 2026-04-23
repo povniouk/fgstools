@@ -371,7 +371,7 @@
         <div class="section">
           <div class="section-header">
             <h2>Action Register</h2>
-            <div style="display:flex;gap:8px;align-items:center;">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <select id="regFilterStatus" class="filter-select" onchange="loadRegister()">
                 <option value="">All statuses</option>
                 <option>Open</option>
@@ -385,18 +385,21 @@
                 <option>Telecom</option><option>Instrumentation</option>
                 <option>Other</option>
               </select>
+              <button id="bulkDeleteBtn" class="btn-del" onclick="deleteSelected()"
+                      style="display:none;padding:4px 12px;font-size:0.82rem;">Delete selected (<span id="bulkCount">0</span>)</button>
             </div>
           </div>
           <div style="overflow-x:auto;">
           <table class="spec-table">
             <thead>
               <tr>
+                <th style="width:32px;"><input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll(this)" style="accent-color:#007acc;cursor:pointer;"></th>
                 <th>Priority</th><th>Discipline</th><th>Action</th>
                 <th>Scope</th><th>Deadline</th><th>Status</th>
               </tr>
             </thead>
             <tbody id="registerBody">
-              <tr><td colspan="6" class="empty-row">No items yet. Import an email to get started.</td></tr>
+              <tr><td colspan="7" class="empty-row">No items yet. Import an email to get started.</td></tr>
             </tbody>
           </table>
           </div>
@@ -1175,12 +1178,19 @@
 
     function renderRegister(items) {
       const tbody = document.getElementById("registerBody");
+      const selAll = document.getElementById("selectAllCheck");
+      if (selAll) selAll.checked = false;
+      updateBulkDeleteBtn();
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No items yet. Import an email to get started.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No items yet. Import an email to get started.</td></tr>';
         return;
       }
       tbody.innerHTML = items.map(item => `
         <tr onclick="openItemPanel(${item.id})" style="cursor:pointer;">
+          <td onclick="event.stopPropagation()">
+            <input type="checkbox" class="reg-check" data-id="${item.id}"
+                   onchange="updateBulkDeleteBtn()" style="accent-color:#007acc;cursor:pointer;">
+          </td>
           <td><span class="priority-badge p-${item.priority}">${escHtml(item.priority)}</span>${item.blocking_point?'<span class="blocking-tag" style="margin-left:4px;">⚠</span>':''}</td>
           <td>${escHtml(item.discipline||'')}</td>
           <td class="reg-action" title="${escHtml(item.action||'')}">${escHtml(item.action||'')}</td>
@@ -1192,6 +1202,35 @@
             </select>
           </td>
         </tr>`).join('');
+    }
+
+    function toggleSelectAll(cb) {
+      document.querySelectorAll(".reg-check").forEach(c => c.checked = cb.checked);
+      updateBulkDeleteBtn();
+    }
+
+    function updateBulkDeleteBtn() {
+      const checked = document.querySelectorAll(".reg-check:checked");
+      const btn = document.getElementById("bulkDeleteBtn");
+      const count = document.getElementById("bulkCount");
+      if (checked.length > 0) {
+        btn.style.display = ""; count.textContent = checked.length;
+      } else {
+        btn.style.display = "none";
+      }
+      const all = document.querySelectorAll(".reg-check");
+      const selAll = document.getElementById("selectAllCheck");
+      if (selAll) selAll.checked = all.length > 0 && checked.length === all.length;
+    }
+
+    async function deleteSelected() {
+      const checked = [...document.querySelectorAll(".reg-check:checked")];
+      if (!checked.length) return;
+      if (!confirm(`Delete ${checked.length} selected item(s)? This cannot be undone.`)) return;
+      await Promise.all(checked.map(cb =>
+        fetch(`/api/email/items/${cb.dataset.id}`, { method: "DELETE" })
+      ));
+      loadRegister();
     }
 
     // --- Side panel (M4) ---
