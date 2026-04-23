@@ -12,6 +12,10 @@ import retriever as _retriever
 
 app = Flask(__name__, static_folder="static")
 
+import email_tracker as _email_tracker
+app.register_blueprint(_email_tracker.bp)
+_email_tracker._current_model = current_model  # share live model reference
+
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:latest")
 SPECS_DIR = os.environ.get("SPECS_DIR", "specs")
@@ -438,6 +442,7 @@ if __name__ == "__main__":
     os.makedirs(SPECS_DIR, exist_ok=True)
     _retriever._log = log_info  # route embedding progress to browser log panel
     log_info(f"Starting F&G Spec Q&A — Ollama: {OLLAMA_URL} — Model: {MODEL}")
+    _email_tracker.init_db()
     preload_specs()
     log_info("App ready.")
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
