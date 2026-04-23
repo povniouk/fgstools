@@ -428,6 +428,24 @@ def get_register():
     return jsonify({"items": rows})
 
 
+@bp.route("/api/email/items/<int:item_id>", methods=["PUT"])
+def update_item(item_id):
+    data = request.json or {}
+    conn = get_db()
+    conn.execute("""
+        UPDATE action_items SET
+            action=?, discipline=?, scope=?, priority=?,
+            deadline=?, blocking_point=?, status=?
+        WHERE id=?
+    """, (data.get("action", ""), data.get("discipline", ""), data.get("scope", ""),
+          data.get("priority", "Medium"), data.get("deadline", ""),
+          1 if data.get("blocking_point") else 0, data.get("status", "Open"),
+          item_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/email/items/<int:item_id>/status", methods=["PUT"])
 def update_status(item_id):
     data = request.json or {}

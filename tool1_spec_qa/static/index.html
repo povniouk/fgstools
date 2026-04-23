@@ -109,6 +109,22 @@
     .contact-input { background: #2d2d2d; border: 1px solid #3c3c3c; border-radius: 2px; color: #cccccc; padding: 4px 7px; font-size: 0.82rem; font-family: inherit; width: 100%; }
     .contact-input:focus { outline: none; border-color: #007acc; }
 
+    /* Side panel (M4) */
+    #sidePanelBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 199; display: none; }
+    #sidePanelBackdrop.open { display: block; }
+    #sidePanel { position: fixed; top: 0; right: -460px; width: 420px; height: 100vh; background: #252526; border-left: 1px solid #3c3c3c; z-index: 200; display: flex; flex-direction: column; transition: right 0.25s ease; }
+    #sidePanel.open { right: 0; }
+    .sp-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid #3c3c3c; background: #2d2d2d; flex-shrink: 0; }
+    .sp-body { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+    .sp-footer { padding: 12px 18px; border-top: 1px solid #3c3c3c; display: flex; gap: 8px; flex-shrink: 0; }
+    .sp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .panel-field { display: flex; flex-direction: column; gap: 4px; }
+    .panel-field label { font-size: 0.7rem; color: #858585; text-transform: uppercase; letter-spacing: 0.4px; }
+    .panel-field input, .panel-field select, .panel-field textarea { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 2px; color: #cccccc; padding: 6px 9px; font-size: 0.85rem; font-family: inherit; width: 100%; }
+    .panel-field input:focus, .panel-field select:focus, .panel-field textarea:focus { outline: none; border-color: #007acc; }
+    .panel-field textarea { resize: vertical; min-height: 90px; }
+    .panel-meta { font-size: 0.78rem; color: #858585; background: #1e1e1e; border-radius: 3px; padding: 9px 11px; line-height: 1.7; }
+
     button { background: #007acc; border: none; border-radius: 2px; padding: 8px 18px; color: white; cursor: pointer; font-size: 0.9rem; white-space: nowrap; }
     button:hover { background: #0062a3; }
     button:disabled { background: #37373d; color: #555; cursor: not-allowed; }
@@ -363,11 +379,11 @@
             <thead>
               <tr>
                 <th>Priority</th><th>Discipline</th><th>Action</th>
-                <th>Scope</th><th>Deadline</th><th>Status</th><th></th>
+                <th>Scope</th><th>Deadline</th><th>Status</th>
               </tr>
             </thead>
             <tbody id="registerBody">
-              <tr><td colspan="7" class="empty-row">No items yet. Import an email to get started.</td></tr>
+              <tr><td colspan="6" class="empty-row">No items yet. Import an email to get started.</td></tr>
             </tbody>
           </table>
           </div>
@@ -461,6 +477,55 @@
   </div>
 
   <!-- Log Panel -->
+  <!-- Side panel (M4) -->
+  <div id="sidePanelBackdrop" onclick="closeItemPanel()"></div>
+  <div id="sidePanel">
+    <div class="sp-header">
+      <span style="font-size:0.85rem;font-weight:600;color:#cccccc;">Action Item</span>
+      <button onclick="closeItemPanel()" style="background:none;border:none;color:#858585;font-size:1.2rem;cursor:pointer;padding:0;line-height:1;">✕</button>
+    </div>
+    <div class="sp-body">
+      <div class="panel-meta" id="panelMeta"></div>
+      <div class="panel-field">
+        <label>Action</label>
+        <textarea id="panelAction"></textarea>
+      </div>
+      <div class="sp-grid">
+        <div class="panel-field">
+          <label>Discipline</label>
+          <select id="panelDiscipline"></select>
+        </div>
+        <div class="panel-field">
+          <label>Scope</label>
+          <select id="panelScope"></select>
+        </div>
+        <div class="panel-field">
+          <label>Priority</label>
+          <select id="panelPriority"></select>
+        </div>
+        <div class="panel-field">
+          <label>Status</label>
+          <select id="panelStatus"></select>
+        </div>
+        <div class="panel-field">
+          <label>Deadline</label>
+          <input type="date" id="panelDeadline">
+        </div>
+        <div class="panel-field">
+          <label>Blocking Point</label>
+          <div style="display:flex;align-items:center;gap:7px;padding-top:6px;">
+            <input type="checkbox" id="panelBlocking" style="accent-color:#f44747;width:14px;height:14px;cursor:pointer;">
+            <label for="panelBlocking" style="font-size:0.83rem;color:#cccccc;cursor:pointer;text-transform:none;letter-spacing:0;">This blocks work</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sp-footer">
+      <button onclick="saveItemPanel()" style="flex:1;">Save</button>
+      <button class="btn-del" onclick="deleteItemFromPanel()" style="padding:8px 16px;">Delete</button>
+    </div>
+  </div>
+
   <div id="logPanel" class="collapsed">
     <div id="logBar" onclick="toggleLog()">
       <span>Output</span>
@@ -1058,6 +1123,8 @@
     }
 
     // --- Action Register ---
+    let _registerItems = [];
+
     async function loadRegister() {
       const params = new URLSearchParams();
       const s = document.getElementById("regFilterStatus").value;
@@ -1067,33 +1134,89 @@
       try {
         const res = await fetch("/api/email/register?" + params);
         const data = await res.json();
-        renderRegister(data.items || []);
+        _registerItems = data.items || [];
+        renderRegister(_registerItems);
       } catch {
         document.getElementById("registerBody").innerHTML =
-          '<tr><td colspan="9" class="empty-row">Failed to load.</td></tr>';
+          '<tr><td colspan="6" class="empty-row">Failed to load.</td></tr>';
       }
     }
 
     function renderRegister(items) {
       const tbody = document.getElementById("registerBody");
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No items yet. Import an email to get started.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No items yet. Import an email to get started.</td></tr>';
         return;
       }
       tbody.innerHTML = items.map(item => `
-        <tr style="cursor:pointer;" title="Click to edit">
+        <tr onclick="openItemPanel(${item.id})" style="cursor:pointer;">
           <td><span class="priority-badge p-${item.priority}">${escHtml(item.priority)}</span>${item.blocking_point?'<span class="blocking-tag" style="margin-left:4px;">⚠</span>':''}</td>
           <td>${escHtml(item.discipline||'')}</td>
           <td class="reg-action" title="${escHtml(item.action||'')}">${escHtml(item.action||'')}</td>
           <td>${escHtml(item.scope||'')}</td>
           <td style="white-space:nowrap;">${item.deadline||'—'}</td>
-          <td>
+          <td onclick="event.stopPropagation()">
             <select class="status-select" onchange="updateItemStatus(${item.id},this.value)">
               ${['Open','In Progress','Closed'].map(s=>`<option${s===item.status?' selected':''}>${s}</option>`).join('')}
             </select>
           </td>
-          <td><button class="btn-del" style="padding:2px 8px;font-size:0.72rem;" onclick="deleteRegItem(${item.id})">×</button></td>
         </tr>`).join('');
+    }
+
+    // --- Side panel (M4) ---
+    let _panelItemId = null;
+
+    function openItemPanel(id) {
+      const item = _registerItems.find(x => x.id === id);
+      if (!item) return;
+      _panelItemId = id;
+      document.getElementById("panelAction").value = item.action || '';
+      document.getElementById("panelDiscipline").innerHTML = opts(_DISC, item.discipline || '');
+      document.getElementById("panelScope").innerHTML = opts(_SCOPE, item.scope || '');
+      document.getElementById("panelPriority").innerHTML = opts(_PRI, item.priority || 'Medium');
+      document.getElementById("panelStatus").innerHTML =
+        ['Open','In Progress','Closed'].map(s=>`<option${s===item.status?' selected':''}>${s}</option>`).join('');
+      document.getElementById("panelDeadline").value = item.deadline || '';
+      document.getElementById("panelBlocking").checked = !!item.blocking_point;
+      document.getElementById("panelMeta").innerHTML =
+        `<div><strong>From:</strong> ${escHtml(item.sender||'—')}</div>` +
+        `<div><strong>Subject:</strong> ${escHtml(item.subject||'—')}</div>` +
+        (item.sent_date ? `<div><strong>Date:</strong> ${escHtml(item.sent_date)}</div>` : '');
+      document.getElementById("sidePanel").classList.add("open");
+      document.getElementById("sidePanelBackdrop").classList.add("open");
+    }
+
+    function closeItemPanel() {
+      document.getElementById("sidePanel").classList.remove("open");
+      document.getElementById("sidePanelBackdrop").classList.remove("open");
+      _panelItemId = null;
+    }
+
+    async function saveItemPanel() {
+      if (!_panelItemId) return;
+      const data = {
+        action:         document.getElementById("panelAction").value.trim(),
+        discipline:     document.getElementById("panelDiscipline").value,
+        scope:          document.getElementById("panelScope").value,
+        priority:       document.getElementById("panelPriority").value,
+        status:         document.getElementById("panelStatus").value,
+        deadline:       document.getElementById("panelDeadline").value,
+        blocking_point: document.getElementById("panelBlocking").checked,
+      };
+      const res = await fetch(`/api/email/items/${_panelItemId}`, {
+        method: "PUT", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(data)
+      });
+      const resp = await res.json();
+      if (resp.ok) { closeItemPanel(); loadRegister(); }
+    }
+
+    async function deleteItemFromPanel() {
+      if (!_panelItemId) return;
+      if (!confirm("Delete this action item?")) return;
+      const res = await fetch(`/api/email/items/${_panelItemId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.ok) { closeItemPanel(); loadRegister(); }
     }
 
     async function updateItemStatus(id, status) {
@@ -1103,12 +1226,7 @@
       });
     }
 
-    async function deleteRegItem(id) {
-      if (!confirm("Delete this action item?")) return;
-      const res = await fetch(`/api/email/items/${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (data.ok) loadRegister();
-    }
+    document.addEventListener("keydown", e => { if (e.key === "Escape") closeItemPanel(); });
 
     // --- Chunk inspector (Admin tab) ---
     async function populateDebugSpecSelect() {
