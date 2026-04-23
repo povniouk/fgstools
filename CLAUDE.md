@@ -101,62 +101,52 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 **Access:** `http://192.168.8.117:5000`
 **Stack:** Flask + pdfplumber + scikit-learn TF-IDF + Ollama API (`http://192.168.8.200:11434`)
 
-**Features implemented (v2):**
-- Integrated dashboard with tabs: Overview, Spec Q&A, Email Tracker (placeholder), SPI Checker (placeholder), C&E Checker (placeholder), Admin
+**Features implemented (v3):**
+- Integrated dashboard with tabs: Overview, Spec Q&A, Email Tracker, SPI Checker (placeholder), C&E Checker (placeholder), Admin
 - Systemd service (`fgstools.service`) — auto-start on boot, restart on crash
-- Admin tab: Chunk Inspector (select spec, load, keyword filter), Infrastructure info
-- **Retrieval stack:** BM25 + TF-IDF + `nomic-embed-text` embeddings via Ollama, merged via Reciprocal Rank Fusion. Separate table/prose fallback pools. Synonym expansion for F&G vocabulary.
-- **PDF parsing:** pdfplumber `find_tables()` + inline extraction; tables rendered as bullet points (`• cell — cell`) — NOT pipe format (12B models misparse pipes). Boilerplate stripped per page.
+- Admin tab: Chunk Inspector, Infrastructure info, Re-index email memory button
+- **Retrieval stack:** BM25 + TF-IDF + `nomic-embed-text` embeddings via Ollama, merged via Reciprocal Rank Fusion. Cross-encoder re-ranker (`bge-reranker-base`) as second pass — retrieves 3×top_k candidates then re-scores to top_k.
+- **PDF parsing:** pdfplumber `find_tables()` + inline extraction; tables rendered as bullet points (`• cell — cell`). Boilerplate stripped per page.
 - **Table-aware chunking:** tables are atomic chunks with preceding prose as context prefix; prose word-chunked with overlap between tables
-- **Chunk inspector** in Admin tab for verifying parsing quality without raw URL
-- Two-page UI: Q&A (default) and Manage Specs
-- Spec library table with editable doc number, title, revision, revision date (persisted per-spec)
-- PDF upload via drag & drop on Manage Specs page
-- PDFs auto-loaded from `~/spec-qa/specs/` on startup
-- Model selector in header (queries Ollama for available models)
-- Thinking toggle in header (off by default for speed; status bar shows `Thinking... N chars, Xs` when on)
-- TF-IDF index (scikit-learn) for fast relevant chunk retrieval
-- Real-time log panel (bottom bar, collapsible, SSE stream) with response time
-- Markdown rendering in answer box (marked.js bundled locally — no CDN)
-- VS Code dark theme
-- **Streaming responses** — backend uses Ollama stream mode + SSE; frontend renders tokens as they arrive (first-token latency shown to user)
-- **Generation tuning** — temperature `0.2`, `repeat_penalty 1.5`, `repeat_last_n 512`, `top_p 0.9`, `num_predict` 1024 (×4 when thinking on)
-- **Memory-cached specs** — chunks + metadata cached in process memory keyed by file mtime; disk re-read only when a spec file changes
-- **TF-IDF index** rebuilt only when the cache key (set of file mtimes) changes — not per query
-- **Cross-page chunking** — PDF chunks span page boundaries (700 words / 150 overlap) to avoid mid-sentence cuts
-- **Thinking mode** — `TOP_K` doubled when thinking is on; thinking status shown in status bar (not streamed to answer box)
-- **Loop guard** — server-side repetition detector aborts stream if a 20-char snippet repeats 4+ times in prior 500 chars; `MAX_THINK_CHARS=6000` cap on thinking tokens
+- **Clickable source tags** — spec sources open the PDF at the cited page (`/pdf/<filename>#page=N`); email sources open a modal showing the full email
+- **Email history toggle** — off by default; when on, approved email bodies are searched alongside specs and cited as `[Email — Sender, Date]`
+- Two-page UI: Q&A (default) and Manage Specs (upload, edit metadata, delete)
+- Model selector in header; embedding models filtered out of the list
+- Thinking toggle (off by default); Email history toggle
+- Real-time log panel (SSE stream), Markdown rendering (marked.js bundled locally)
+- VS Code dark theme; Enter to send query, Shift+Enter for newline
+- **Streaming responses** — SSE; sources sent after stream completes, matched to what the model actually cited
+- **Generation tuning** — temperature `0.2`, `repeat_penalty 1.5`, `repeat_last_n 512`, `top_p 0.9`, `num_predict` 1024
+- **Memory-cached specs** — chunks + metadata cached keyed by file mtime
+- **Loop guard** — repetition detector aborts stream; `MAX_THINK_CHARS=6000` thinking cap
 
-**Tunables (env vars):** `OLLAMA_URL`, `OLLAMA_MODEL`, `SPECS_DIR`, `TOP_K` (default 8), `TEMPERATURE`, `NUM_PREDICT`, `MAX_THINK_CHARS`
+**Tunables (env vars):** `OLLAMA_URL`, `OLLAMA_MODEL`, `SPECS_DIR`, `TOP_K` (default 6), `TEMPERATURE`, `NUM_PREDICT`, `MAX_THINK_CHARS`
 
-**Known issues to revisit:**
-- `gemma4:26b` with thinking enabled occasionally degenerates into repetition loops (e.g. `000-000-000-000...`). All mitigations above are in place but do not fully resolve it. Root cause: 22% CPU spill (26B doesn't fit in 16GB VRAM) causes sampler instability that thinking mode amplifies.
-- **Next thing to try:** pull `gemma4:26b-nvfp4` (Blackwell-native FP4 — should fit fully in VRAM, no CPU spill). Loses vision/OCR — acceptable since pdfplumber extracts text.
-- `gemma4:latest` (12B) is stable for production use.
-- Model sometimes says "not found" even when the answer is in the retrieved chunks, particularly for tabular data. Partial fix: prompt now includes a table-reading example. Root cause under investigation.
+**Known issues:**
+- `gemma4:26b` with thinking enabled occasionally degenerates into repetition loops. Root cause: 22% CPU spill (26B doesn't fit in 16GB VRAM). Next to try: `gemma4:26b-nvfp4` (Blackwell FP4, fits in VRAM).
+- `gemma4:latest` (12B) stable for production use.
 
-**RAG pipeline — known challenges, current status, and backlog:**
+**RAG pipeline — status:**
 
 | Challenge | Status | Notes |
 |-----------|--------|-------|
-| PDF table extraction | ✅ Addressed | pdfplumber `find_tables()` + inline bullet-point injection. Tables rendered as `• cell — cell` (NOT Markdown pipes — small LLMs misparse pipe tables). |
-| Table atomicity | ✅ Fixed | Tables are now atomic chunks; each carries the 4 preceding prose lines as context prefix. |
-| Word-count chunking splits context | ⚠️ Partial | Tables are safe. Prose chunks are still word-count based. Future: semantic chunking (split at sentence/paragraph boundaries). |
-| Vocabulary mismatch (synonyms) | ⚠️ Partial | BM25+TF-IDF hybrid + hand-coded synonym dict + fuzzy acronym fallback. Works for known terms. Breaks on new vocabulary. Long-term fix: embeddings. |
-| Hallucinations / ignoring context | ⚠️ Partial | Prompt explicitly forbids guessing and includes a table-reading example. Model still occasionally says "not found" when answer is in retrieved chunks. May improve with re-ranker. |
-| Needle in a haystack (multi-page answers) | ❌ Not addressed | TOP_K=8 may miss relevant chunks if answer spans distant pages. Fix: **re-ranker** (retrieve top-20 with BM25, re-score with a cross-encoder to top-5 before sending to LLM). |
+| PDF table extraction | ✅ Done | pdfplumber + bullet-point format |
+| Table atomicity | ✅ Done | Atomic chunks with prose context prefix |
+| Semantic embeddings | ✅ Done | `nomic-embed-text` via Ollama, cached to `.npy` |
+| Cross-encoder re-ranker | ✅ Done | `bge-reranker-base` via `sentence-transformers` on fgstools LXC (CPU); install in progress |
+| Email memory (RAG) | ✅ Done | Approved emails chunked + embedded in `cwlng.db`; searchable via Email history toggle |
+| Word-count chunking | ⚠️ Partial | Prose chunks word-count based; semantic chunking deferred |
+| Vocabulary mismatch | ⚠️ Partial | Synonym dict + embeddings. Works for known terms. |
 
-**Backlog — priority order:**
-
-1. **Semantic embeddings** (next, one session) — pull `nomic-embed-text` via Ollama (CPU, ~274MB), embed all chunks at build time, cache to `.npy` file, merge with BM25 via RRF. Eliminates synonym dict entirely. Handles unseen vocabulary automatically.
-
-2. **Re-ranker** (after embeddings) — retrieve top-20 via BM25+embeddings, then use a local cross-encoder (`bge-reranker-base`, ~270MB, CPU) to re-score and select top-5 before sending to LLM. Directly solves "needle in a haystack" and hallucination-from-wrong-context problems.
-
-3. **Semantic chunking** (low urgency) — split prose at sentence/paragraph boundaries rather than raw word count. Ensures a sentence is never cut mid-way. Libraries: `nltk` or simple regex on `.`, `\n\n` boundaries.
+**Re-ranker install status:**
+- `bge-reranker-base` runs locally on fgstools LXC via `sentence-transformers`
+- `torch` (CPU-only) install in progress on LXC — was killed by OOM at 2GB RAM; RAM bumped to 2GB, retry in progress
+- Once installed: no restart needed — retriever loads model lazily on first query, falls back gracefully if unavailable
+- Retriever already wired: fetches 3×top_k candidates, re-ranks to top_k
 
 ---
 
-### Tool 5 — Email Tracker — IN PROGRESS
+### Tool 5 — Email Tracker — COMPLETE (M1–M7)
 **Purpose:** Track deliverables, action items, and blocking points from project emails. Secondary purpose: build a searchable project memory from email history to complement the spec Q&A tool.
 
 **Ingestion method (decided):** User drags email from Outlook to Desktop → saves as `.eml` → drags `.eml` to the browser drop zone. Also accepts `.msg`. No Gmail/IMAP needed — no external accounts, fully local.
@@ -193,7 +183,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Slimmed to 7 columns: Priority | Discipline | Action | Scope | Deadline | Status | ×
 - Added overflow-x:auto wrapper to prevent button overflow
 
-**M3.5 — Contacts directory** ← NEXT
+**M3.5 — Contacts directory** ✅ DONE
 - New sub-tab in Email Tracker: Import | Action Register | **Contacts**
 - New DB table: `contacts (id, name, email, position, operating_center, discipline, notes, source, created_at, updated_at)`
 - **Operating centers:** POC (Paris), HOC (Houston), BoOC (Bogota), Owner, Vendor, Other
@@ -203,20 +193,20 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Click row → inline edit or simple modal
 - Future link to M4 side panel: "open actions from this person" count shown in contact row
 
-**M4 — Side detail / edit panel**
+**M4 — Side detail / edit panel** ✅ DONE
 - Click a register row → right-side panel slides in
 - Panel shows all fields, fully editable
 - Save button writes changes back to DB
 - Close/dismiss returns to register
 - Delete button in panel footer
 
-**M5 — Append-only notes log**
+**M5 — Append-only notes log** ✅ DONE
 - Notes section inside detail panel
 - Each entry is timestamped and appended — history never overwritten
 - Supports plain text; renders as a log (newest at top)
 - New DB column: `notes` (JSON array of `{ts, text}`) or separate `item_notes` table
 
-**M6 — File attachments per action item**
+**M6 — File attachments per action item** ✅ DONE
 - Drag & drop or file picker in the detail panel: PNG/JPG screenshots, PDF, `.eml`, Word docs
 - Files stored on LXC filesystem: `~/spec-qa/attachments/<item_id>/`
 - New DB table: `attachments (id, item_id, filename, original_name, uploaded_at)`
@@ -301,9 +291,11 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - OS: Debian 13 (headless, SSH only)
 - Hosts all web application tools
 - Calls Ollama on `gemma4` at `http://192.168.8.200:11434`
-- App folder: `~/spec-qa/` (will be reorganised to `~/fgstools/` when dashboard rebuild begins)
+- App folder: `~/spec-qa/`
 - Spec PDFs stored in `~/spec-qa/specs/`
-- SQLite database will live here: `~/fgstools/cwlng.db`
+- SQLite database: `~/spec-qa/cwlng.db` (emails, action_items, contacts, attachments, email_chunks)
+- File attachments stored in `~/spec-qa/attachments/<item_id>/`
+- RAM: 2048MB (bumped from 1024MB to support sentence-transformers install)
 - **App must run as systemd service** — not manually from terminal
 
 ### Why local AI instead of cloud API
@@ -344,16 +336,8 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] GitHub repo initialised (`fgstools`), SSH key set up, initial commit pushed
 - [x] Convert app to systemd service on `fgstools` LXC (`/etc/systemd/system/fgstools.service`, enabled, starts on boot)
 - [x] Dashboard rebuild — multi-tab architecture (Overview, Spec Q&A, Email Tracker, SPI Checker, C&E Checker, Admin)
-- [ ] Reranker service on gemma4 VM — files ready in `reranker/`, install instructions in session notes below
-- [ ] Wire fgstools retriever to call reranker at http://192.168.8.200:11435/rerank
-- [x] Tool 5 M1 — Email Tracker basic import + action register (`.eml`/`.msg`, Ollama extraction, draft cards, SQLite)
-- [x] Tool 5 M2 — Card + register field cleanup (disciplines, scope dropdown, simplify form)
-- [x] Tool 5 M3 — Register table layout fix (slim columns, overflow fixed)
-- [ ] Tool 5 M3.5 — Contacts directory (auto-extract from email signatures, manual add/edit, sub-tab)
-- [ ] Tool 5 M4 — Side detail / edit panel
-- [ ] Tool 5 M5 — Append-only notes log per item
-- [ ] Tool 5 M6 — File attachments per action item
-- [x] Tool 5 M7 — Email as project memory (RAG integration with Q&A)
+- [ ] Reranker (`bge-reranker-base`) on fgstools LXC — `sentence-transformers` + CPU torch install in progress; retriever already wired, falls back gracefully if not yet installed
+- [x] Tool 5 M1–M7 — Email Tracker complete: import, action register, contacts, side panel, notes log, attachments, email memory RAG
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
 - [ ] Tool 4 (Revision Delta Tracker) — not started
