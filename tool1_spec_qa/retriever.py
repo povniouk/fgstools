@@ -309,7 +309,9 @@ def _rerank(question, candidates, top_n=5):
 def find_relevant_chunks(question, chunks, cache_key, top_k=6):
     if spec_index.cache_key != cache_key:
         spec_index.build(chunks, cache_key)
-    # First pass: cast wide net with BM25+TF-IDF+embeddings
-    candidates = spec_index.query(question, top_k=top_k)
-    # Second pass: re-rank with cross-encoder, return top 5
-    return _rerank(question, candidates, top_n=5)
+    # First pass: cast wider net when reranker is available
+    reranker = _load_reranker()
+    candidate_k = max(top_k * 3, 20) if reranker is not None else top_k
+    candidates = spec_index.query(question, top_k=candidate_k)
+    # Second pass: re-rank with cross-encoder, return top_k
+    return _rerank(question, candidates, top_n=top_k)
