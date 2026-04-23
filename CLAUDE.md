@@ -163,7 +163,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 **Stack:** `email_tracker.py` Flask Blueprint, SQLite (`cwlng.db`), Ollama extraction via streaming API.
 
-**Disciplines:** HSED, ICST, Electrical, HVAC, Telecom, Instrumentation, Other
+**Disciplines:** HSED, ICSS, Electrical, HVAC, Telecom, Instrumentation, Other
 
 **Scope tags (replaces document_ref):** SPI, C&E, FGS Layouts, Document Review, Interface, General, Other
 
@@ -184,7 +184,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 **M2 — Card + register field cleanup** ✅ DONE
 - Simplified draft card to 5 fields: Action, Discipline, Scope, Priority, Deadline (blocking point as header checkbox only)
-- New discipline list: HSED, ICST, Electrical, HVAC, Telecom, Instrumentation, Other
+- New discipline list: HSED, ICSS, Electrical, HVAC, Telecom, Instrumentation, Other
 - Replaced document_ref with Scope dropdown: SPI, C&E, FGS Layouts, Document Review, Interface, General, Other
 - Removed "Blocking point" from category list
 - Updated Ollama extraction prompt to match new fields

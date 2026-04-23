@@ -351,7 +351,7 @@
               </select>
               <select id="regFilterDiscipline" class="filter-select" onchange="loadRegister()">
                 <option value="">All disciplines</option>
-                <option>HSED</option><option>ICST</option>
+                <option>HSED</option><option>ICSS</option>
                 <option>Electrical</option><option>HVAC</option>
                 <option>Telecom</option><option>Instrumentation</option>
                 <option>Other</option>
@@ -815,7 +815,7 @@
       } catch { setStatus("emailUploadStatus", "error", "Upload failed. Check server logs."); }
     }
 
-    const _DISC  = ["HSED","ICST","Electrical","HVAC","Telecom","Instrumentation","Other"];
+    const _DISC  = ["HSED","ICSS","Electrical","HVAC","Telecom","Instrumentation","Other"];
     const _SCOPE = ["SPI","C&E","FGS Layouts","Document Review","Interface","General","Other"];
     const _PRI   = ["Low","Medium","High","Critical"];
 

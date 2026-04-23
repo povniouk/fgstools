@@ -18,7 +18,7 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 # Shared with app.py current_model dict after registration — set by app.py
 _current_model = {"name": os.environ.get("OLLAMA_MODEL", "gemma4:latest")}
 
-DISCIPLINES = ["HSED", "ICST", "Electrical", "HVAC", "Telecom", "Instrumentation", "Other"]
+DISCIPLINES = ["HSED", "ICSS", "Electrical", "HVAC", "Telecom", "Instrumentation", "Other"]
 SCOPES     = ["SPI", "C&E", "FGS Layouts", "Document Review", "Interface", "General", "Other"]
 CATEGORIES = ["Comment response", "IFR submittal", "Technical query",
               "Information request", "Meeting action"]
@@ -162,7 +162,7 @@ Extract EVERY item that requires any attention or follow-up from this project em
 For each numbered or bulleted point in the email body, ask: does this require any action? If yes, include it.
 
 Return a JSON array where each element has exactly these fields:
-- "discipline": team who sent or owns this (one of: "HSED", "ICST", "Electrical", "HVAC", "Telecom", "Instrumentation", "Other")
+- "discipline": team who sent or owns this (one of: "HSED", "ICSS", "Electrical", "HVAC", "Telecom", "Instrumentation", "Other")
 - "scope": area of work this relates to (one of: "SPI", "C&E", "FGS Layouts", "Document Review", "Interface", "General", "Other")
 - "action": one clear sentence — what needs to happen
 - "blocking_point": true only if this explicitly blocks progress, else false
@@ -232,7 +232,7 @@ Return a JSON object with exactly these fields:
 - "email": sender's email address
 - "position": job title (e.g. "ICSS Lead", "FGS Engineer", "Project Manager"), else ""
 - "operating_center": one of ["POC","HOC","BoOC","Owner","Vendor","Other"] (POC=Paris, HOC=Houston, BoOC=Bogota)
-- "discipline": one of ["HSED","ICST","Electrical","HVAC","Telecom","Instrumentation","Other"]
+- "discipline": one of ["HSED","ICSS","Electrical","HVAC","Telecom","Instrumentation","Other"]
 
 FROM: {sender}
 EMAIL BODY (end — focus on signature):
