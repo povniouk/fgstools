@@ -156,23 +156,70 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 ---
 
-### Tool 5 — Email Tracker — NEXT TO BUILD
-**Purpose:** Track deliverables, action items, and blocking points received by email from other engineering teams (HSED HOC, HSED BoOC, Civil, Piping, Vendors, etc.).
+### Tool 5 — Email Tracker — IN PROGRESS
+**Purpose:** Track deliverables, action items, and blocking points from project emails. Secondary purpose: build a searchable project memory from email history to complement the spec Q&A tool.
 
-**Design decisions:**
-- User **forwards** project emails to a dedicated Gmail account (e.g. `cwlng-fgs@gmail.com`)
-- App polls Gmail via **IMAP** (Python `imaplib`) on a configurable interval
-- Ollama extracts structured items per email: discipline/sender, document references, action required, blocking point, deadline, category, suggested priority
-- User sees a **draft preview** (one card per extracted item) and **approves, edits, or discards** each — AI suggests, human confirms
-- Approved items land in `cwlng.db` (SQLite) as action register entries
-- Action register is filterable by discipline, category, status (Open / In Progress / Closed)
-- Status flipped manually by user as items resolve
+**Ingestion method (decided):** User drags email from Outlook to Desktop → saves as `.eml` → drags `.eml` to the browser drop zone. Also accepts `.msg`. No Gmail/IMAP needed — no external accounts, fully local.
 
-**Why Gmail forwarding instead of direct company mailbox:** Company mailbox has no API access and admin restrictions. Gmail IMAP with an app password requires no OAuth, no admin rights, just a forward rule from the company inbox.
+**Stack:** `email_tracker.py` Flask Blueprint, SQLite (`cwlng.db`), Ollama extraction via streaming API.
 
-**Why AI-suggested priority with human approval:** Avoids getting lost in history; user stays in control of what matters.
+**Disciplines:** HSED, ICST, Electrical, HVAC, Telecom, Instrumentation, Other
 
-**Categories:** Comment response, IFR submittal, Technical query, Information request, Meeting action, Blocking point
+**Scope tags (replaces document_ref):** SPI, C&E, FGS Layouts, Document Review, Interface, General, Other
+
+**Categories:** Comment response, IFR submittal, Technical query, Information request, Meeting action *(blocking point is a separate checkbox, not a category)*
+
+**Status values:** Open / In Progress / Closed
+
+---
+
+#### Tool 5 — Milestone Plan
+
+**M1 — Basic import + action register** ✅ DONE
+- `.eml` / `.msg` parsing (Python `email` lib + `extract-msg`)
+- Ollama extraction via streaming with `think=False`
+- Draft cards: approve / discard per item or all at once
+- SQLite tables: `emails`, `action_items`
+- Action register: filterable by status/discipline, inline status change, delete
+
+**M2 — Card + register field cleanup** ← NEXT
+- Simplify draft card to 5 fields: Action, Discipline, Scope, Priority, Deadline (blocking point as header checkbox only)
+- New discipline list: HSED, ICST, Electrical, HVAC, Telecom, Instrumentation, Other
+- Replace document_ref with Scope dropdown: SPI, C&E, FGS Layouts, Document Review, Interface, General, Other
+- Remove "Blocking point" from category list
+- Update Ollama extraction prompt to match new fields
+
+**M3 — Register table layout fix**
+- Slim table to 6 columns: Priority | Discipline | Action (truncated) | Scope | Deadline | Status
+- Remove delete button from table row (move to detail panel)
+- Click any row → open detail panel (M4)
+
+**M4 — Side detail / edit panel**
+- Click a register row → right-side panel slides in
+- Panel shows all fields, fully editable
+- Save button writes changes back to DB
+- Close/dismiss returns to register
+- Delete button in panel footer
+
+**M5 — Append-only notes log**
+- Notes section inside detail panel
+- Each entry is timestamped and appended — history never overwritten
+- Supports plain text; renders as a log (newest at top)
+- New DB column: `notes` (JSON array of `{ts, text}`) or separate `item_notes` table
+
+**M6 — File attachments per action item**
+- Drag & drop or file picker in the detail panel: PNG/JPG screenshots, PDF, `.eml`, Word docs
+- Files stored on LXC filesystem: `~/spec-qa/attachments/<item_id>/`
+- New DB table: `attachments (id, item_id, filename, original_name, uploaded_at)`
+- Listed in panel with filename + upload date; click to download
+- Close action button: sets status to Closed, records timestamp in notes log
+
+**M7 — Email as project memory (RAG integration)**
+- Cleaned email bodies chunked and embedded alongside spec chunks in the retrieval pool
+- Each email chunk tagged with sender, date, discipline (cites as `[Email — Sender, Date]`)
+- Q&A tool searches specs + email history simultaneously
+- Decisions, interface clarifications, and responsibility assignments become findable by natural language query
+- Trigger: any approved email is automatically indexed; re-index on demand from Admin tab
 
 ---
 
@@ -290,7 +337,13 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] Dashboard rebuild — multi-tab architecture (Overview, Spec Q&A, Email Tracker, SPI Checker, C&E Checker, Admin)
 - [ ] Reranker service on gemma4 VM — files ready in `reranker/`, install instructions in session notes below
 - [ ] Wire fgstools retriever to call reranker at http://192.168.8.200:11435/rerank
-- [ ] Tool 5 (Email Tracker) — next to build
+- [x] Tool 5 M1 — Email Tracker basic import + action register (`.eml`/`.msg`, Ollama extraction, draft cards, SQLite)
+- [ ] Tool 5 M2 — Card + register field cleanup (disciplines, scope dropdown, simplify form)
+- [ ] Tool 5 M3 — Register table layout fix (slim columns, click-to-open)
+- [ ] Tool 5 M4 — Side detail / edit panel
+- [ ] Tool 5 M5 — Append-only notes log per item
+- [ ] Tool 5 M6 — File attachments per action item
+- [ ] Tool 5 M7 — Email as project memory (RAG integration with Q&A)
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
 - [ ] Tool 4 (Revision Delta Tracker) — not started
