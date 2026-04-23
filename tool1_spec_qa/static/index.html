@@ -74,6 +74,8 @@
     .spec-table input[type="text"]:focus { outline: none; border-color: #007acc; }
     .btn-save { background: #37373d; border: 1px solid #3c3c3c; border-radius: 2px; padding: 4px 10px; color: #cccccc; cursor: pointer; font-size: 0.78rem; white-space: nowrap; }
     .btn-save:hover { background: #007acc; border-color: #007acc; color: #fff; }
+    .btn-del { background: #2a1515; border: 1px solid #5a1f1f; border-radius: 2px; padding: 4px 10px; color: #f44747; cursor: pointer; font-size: 0.78rem; white-space: nowrap; }
+    .btn-del:hover { background: #5a1f1f; }
     .empty-row { color: #555; font-style: italic; font-size: 0.85rem; padding: 12px 10px; }
 
     /* Upload */
@@ -108,7 +110,8 @@
 
     .sources { margin-top: 12px; }
     .sources-label { font-size: 0.72rem; color: #858585; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .source-tag { display: inline-block; background: #37373d; border: 1px solid #3c3c3c; padding: 3px 10px; border-radius: 2px; font-size: 0.75rem; color: #858585; margin: 3px 4px 3px 0; }
+    .source-tag { display: inline-block; background: #37373d; border: 1px solid #3c3c3c; padding: 3px 10px; border-radius: 2px; font-size: 0.75rem; color: #858585; margin: 3px 4px 3px 0; text-decoration: none; }
+    .source-tag:hover { border-color: #007acc; color: #9cdcfe; }
     .source-tag strong { color: #9cdcfe; }
 
     .status { font-size: 0.8rem; color: #858585; margin-top: 8px; min-height: 18px; }
@@ -259,10 +262,10 @@
           <h2>Specification Library</h2>
           <table class="spec-table">
             <thead>
-              <tr><th>Document Number</th><th>Title</th><th>Revision</th><th>Revision Date</th><th></th></tr>
+              <tr><th>Document Number</th><th>Title</th><th>Revision</th><th>Revision Date</th><th></th><th></th></tr>
             </thead>
             <tbody id="specTableBodyManage">
-              <tr><td colspan="5" class="empty-row">No specifications loaded.</td></tr>
+              <tr><td colspan="6" class="empty-row">No specifications loaded.</td></tr>
             </tbody>
           </table>
         </div>
@@ -505,6 +508,7 @@
           <td><input type="text" value="${s.revision}" placeholder="Rev" style="max-width:60px" data-field="revision"></td>
           <td><input type="text" value="${s.rev_date}" placeholder="e.g. 2025-03-15" data-field="rev_date"></td>
           <td><button class="btn-save" onclick="saveMetadata('${s.filename}', this)">Save</button></td>
+          <td><button class="btn-del" onclick="deleteSpec('${s.filename}', this)">Delete</button></td>
         </tr>`).join("");
     }
 
@@ -527,8 +531,18 @@
       const unique = [...new Map(sources.map(s => [s.doc_number + s.section, s])).values()];
       sourcesBox.innerHTML = unique.length
         ? `<div class="sources-label">Sources</div>` + unique.map(s =>
-            `<span class="source-tag"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section}</span>`).join("")
+            `<a class="source-tag" href="/pdf/${encodeURIComponent(s.filename)}#page=${s.page}" target="_blank"><strong>${s.doc_number}</strong> Rev.${s.revision} — ${s.section} p.${s.page}</a>`).join("")
         : "";
+    }
+
+    async function deleteSpec(filename, btn) {
+      if (!confirm(`Delete "${filename}"?\n\nThis will remove the PDF and its index. This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/api/specs/${encodeURIComponent(filename)}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.ok) { refreshSpecsManage(); refreshSpecsQA(); }
+        else { btn.textContent = "Error"; }
+      } catch { btn.textContent = "Error"; }
     }
 
     async function askQuestion() {

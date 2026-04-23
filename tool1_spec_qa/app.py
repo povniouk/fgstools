@@ -243,6 +243,24 @@ def upload_spec():
     return jsonify({"loaded": f.filename, "chunks": len(chunks), "meta": meta})
 
 
+@app.route("/pdf/<path:filename>")
+def serve_pdf(filename):
+    return send_from_directory(os.path.abspath(SPECS_DIR), filename)
+
+
+@app.route("/api/specs/<path:filename>", methods=["DELETE"])
+def delete_spec(filename):
+    base = os.path.join(SPECS_DIR, filename)
+    for suffix in ("", ".chunks.json", ".meta.json"):
+        p = base + suffix
+        if os.path.exists(p):
+            os.remove(p)
+    _specs_cache.pop(filename, None)
+    refresh_cache()
+    log_info(f"Deleted spec: {filename}")
+    return jsonify({"ok": True})
+
+
 @app.route("/api/query", methods=["POST"])
 def query():
     data = request.json
@@ -298,6 +316,7 @@ ANSWER:"""
                 "title": c["title"],
                 "revision": c["revision"],
                 "section": c["section"],
+                "page": c["page"],
             })
 
     # Thinking mode needs a bigger budget — thinking tokens count against num_predict
