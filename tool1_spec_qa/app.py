@@ -27,6 +27,9 @@ from email_tracker import retrieve_email_chunks
 app.register_blueprint(_email_tracker.bp)
 _email_tracker._current_model = current_model  # share live model reference
 
+import spi_checker as _spi_checker
+app.register_blueprint(_spi_checker.bp)
+
 # Log buffer — keeps last 200 entries, streams to connected clients
 _log_buffer = deque(maxlen=200)
 _log_subscribers = []
@@ -501,10 +504,12 @@ def preload_specs():
 
 if __name__ == "__main__":
     os.makedirs(SPECS_DIR, exist_ok=True)
-    _retriever._log = log_info       # route spec embedding progress to browser log panel
-    _email_tracker._log = log_info   # route email indexing progress to browser log panel
+    _retriever._log = log_info
+    _email_tracker._log = log_info
+    _spi_checker._log = log_info
     log_info(f"Starting F&G Spec Q&A — Ollama: {OLLAMA_URL} — Model: {MODEL}")
     _email_tracker.init_db()
+    _spi_checker.init_db()
     preload_specs()
     log_info("App ready.")
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

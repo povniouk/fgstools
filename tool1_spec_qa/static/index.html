@@ -222,6 +222,38 @@
     .sr-text { font-size: 0.84rem; color: #cccccc; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
     .sr-hl { background: #3a3010; color: #dcdcaa; border-radius: 2px; padding: 0 2px; }
     .sr-table-badge { font-size: 0.65rem; background: #1a2a3a; color: #4ec9b0; border-radius: 2px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
+
+    /* SPI Checker */
+    #spiDropZone { border: 1px dashed #3c3c3c; border-radius: 4px; padding: 36px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+    #spiDropZone:hover, #spiDropZone.drag-over { border-color: #007acc; }
+    .spi-import-summary { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 3px; padding: 14px 18px; margin-top: 14px; display: none; }
+    .spi-import-summary.visible { display: block; }
+    .spi-summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .spi-stat { background: #252526; border-radius: 3px; padding: 10px 14px; }
+    .spi-stat-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.6px; color: #858585; margin-bottom: 4px; }
+    .spi-stat-value { font-size: 1.4rem; font-weight: 300; color: #cccccc; }
+    .spi-stat-value.warn { color: #dcdcaa; }
+    .spi-stat-value.ok { color: #4ec9b0; }
+    .spi-history { margin-top: 14px; }
+    .spi-history-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid #2a2a2a; font-size: 0.83rem; }
+    .spi-history-row:last-child { border-bottom: none; }
+    .spi-week { color: #9cdcfe; font-weight: 600; min-width: 36px; }
+    .spi-date { color: #555; font-size: 0.75rem; flex: 1; }
+    .spi-fgs-count { color: #4ec9b0; min-width: 80px; }
+    .spi-load-btn { font-size: 0.75rem; background: #37373d; border: 1px solid #3c3c3c; border-radius: 2px; padding: 3px 10px; color: #858585; cursor: pointer; }
+    .spi-load-btn:hover { border-color: #007acc; color: #9cdcfe; background: #37373d; }
+    .flag-badge { display: inline-block; font-size: 0.65rem; border-radius: 2px; padding: 1px 6px; margin-right: 3px; font-weight: 600; }
+    .flag-missing_typical   { background: #2e1e0a; color: #ce9178; }
+    .flag-missing_area_class { background: #1a2020; color: #4ec9b0; }
+    .flag-missing_tag_type  { background: #252515; color: #dcdcaa; }
+    .flag-status_tbf        { background: #2a1515; color: #f44747; }
+    .spi-tag-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .spi-tag-table th { text-align: left; padding: 7px 10px; color: #858585; font-weight: 600; border-bottom: 1px solid #3c3c3c; white-space: nowrap; }
+    .spi-tag-table td { padding: 6px 10px; border-bottom: 1px solid #2d2d2d; vertical-align: middle; }
+    .spi-tag-table tr:last-child td { border-bottom: none; }
+    .spi-tag-table tr:hover td { background: #2a2d2e; }
+    .spi-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+    .spi-filters label { font-size: 0.75rem; color: #858585; }
   </style>
 </head>
 <body>
@@ -237,7 +269,7 @@
       <div class="dash-tab" onclick="showDash('overview')">Overview</div>
       <div class="dash-tab active" onclick="showDash('specqa')">Spec Q&amp;A</div>
       <div class="dash-tab" onclick="showDash('email')">Email Tracker</div>
-      <div class="dash-tab" onclick="showDash('spi')">SPI Checker <span class="badge">soon</span></div>
+      <div class="dash-tab" onclick="showDash('spi')">SPI Checker</div>
       <div class="dash-tab" onclick="showDash('cande')">C&amp;E Checker <span class="badge">soon</span></div>
       <div class="dash-tab" onclick="showDash('admin')">Admin</div>
     </nav>
@@ -481,10 +513,80 @@
   <!-- ── SPI Checker ── -->
   <div id="page-spi" class="page">
     <div class="container">
-      <div class="coming-soon">
-        <h2>SPI Consistency Checker — Coming Soon</h2>
-        <p>Ingests weekly SPI Excel exports, stores them in the database, and surfaces a delta report: new tags, changed fields, missing mandatory data. Waiting for complete data from HSED HOC and BoOC.</p>
+      <div class="sub-nav">
+        <div class="sub-tab active" onclick="showSpiTab('import', this)">Import</div>
+        <div class="sub-tab" onclick="showSpiTab('register', this)">Tag Register</div>
       </div>
+
+      <!-- Import tab -->
+      <div id="spi-tab-import">
+        <div class="section">
+          <div class="section-header"><h2>Drop SPI Excel Export</h2></div>
+          <div id="spiDropZone">
+            <div style="color:#858585;font-size:0.9rem;">Drag a <strong style="color:#cccccc;">weekly SPI .xlsx</strong> here, or click to select</div>
+            <div style="color:#555;font-size:0.78rem;margin-top:8px;">Filename should contain the week number, e.g. CW_W18_SPI_Extract.xlsx</div>
+            <input type="file" id="spiFileInput" accept=".xlsx" style="display:none" onchange="uploadSpi(this.files[0])">
+          </div>
+          <div class="status" id="spiUploadStatus"></div>
+          <div class="spi-import-summary" id="spiImportSummary"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-header"><h2>Import History</h2></div>
+          <div id="spiHistory"><span style="color:#555;font-size:0.85rem;">No imports yet.</span></div>
+        </div>
+      </div>
+
+      <!-- Tag Register tab -->
+      <div id="spi-tab-register" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <h2>F&amp;G Tag Register</h2>
+            <span id="spiRegCount" style="font-size:0.78rem;color:#858585;"></span>
+          </div>
+          <div class="spi-filters">
+            <label>System</label>
+            <select class="filter-select" id="spiFilterSystem" onchange="loadSpiTags()">
+              <option value="">All</option>
+              <option value="FGS">FGS</option>
+              <option value="LFGS">LFGS</option>
+            </select>
+            <label>IO Type</label>
+            <select class="filter-select" id="spiFilterIO" onchange="loadSpiTags()">
+              <option value="">All</option>
+              <option value="AI">AI</option>
+              <option value="DI">DI</option>
+              <option value="DO">DO</option>
+            </select>
+            <label>Design By</label>
+            <select class="filter-select" id="spiFilterDesignBy" onchange="loadSpiTags()">
+              <option value="">All</option>
+              <option value="BoOC">BoOC</option>
+              <option value="COC">COC</option>
+              <option value="HOC">HOC</option>
+            </select>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="spiFilterFlags" onchange="loadSpiTags()" style="accent-color:#007acc;">
+              Flags only
+            </label>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="spi-tag-table">
+              <thead>
+                <tr>
+                  <th>Tag Number</th><th>System</th><th>IO Type</th>
+                  <th>Typical</th><th>Service</th><th>Area Class</th>
+                  <th>Unit</th><th>Design By</th><th>Status</th><th>Flags</th>
+                </tr>
+              </thead>
+              <tbody id="spiTagBody">
+                <tr><td colspan="10" class="empty-row">Import an SPI file to populate the register.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -684,6 +786,7 @@
       if (name === "specqa") { refreshSpecsQA(); refreshModels(); }
       if (name === "admin") populateDebugSpecSelect();
       if (name === "email") { /* register loads when its sub-tab is clicked */ }
+      if (name === "spi") loadSpiHistory();
     }
 
     // --- Sub-navigation (inside Spec Q&A) ---
@@ -1585,6 +1688,134 @@
       [...e.dataTransfer.files].forEach(f => uploadAttachment(f));
     });
 
+    // --- SPI Checker ---
+    let _spiCurrentImportId = null;
+
+    function showSpiTab(name, tab) {
+      document.querySelectorAll("[id^='spi-tab-']").forEach(p => p.style.display = 'none');
+      document.querySelectorAll('#page-spi .sub-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('spi-tab-' + name).style.display = 'block';
+      tab.classList.add('active');
+      if (name === 'register') loadSpiTags();
+    }
+
+    function setupSpiDropZone() {
+      const zone = document.getElementById('spiDropZone');
+      zone.addEventListener('click', () => document.getElementById('spiFileInput').click());
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadSpi(file);
+      });
+    }
+
+    const _FLAG_LABELS = {
+      missing_typical: 'No Typical', missing_area_class: 'No Area Class',
+      missing_tag_type: 'No Tag Type', status_tbf: 'TBF',
+    };
+
+    async function uploadSpi(file) {
+      if (!file.name.toLowerCase().endsWith('.xlsx')) {
+        setStatus('spiUploadStatus', 'error', 'Only .xlsx files accepted.'); return;
+      }
+      setStatus('spiUploadStatus', '', '<span class="spinner"></span>Parsing ' + file.name + '...');
+      const fd = new FormData(); fd.append('file', file);
+      try {
+        const res = await fetch('/api/spi/import', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.error) { setStatus('spiUploadStatus', 'error', data.error); return; }
+
+        setStatus('spiUploadStatus', 'ok', `Imported ${data.week_label}: ${data.fgs_count} F&G tags from ${data.total_rows.toLocaleString()} rows.`);
+        _spiCurrentImportId = data.import_id;
+
+        // Show summary
+        const fc = data.flag_counts || {};
+        const flagged = Object.values(fc).reduce((a,b)=>a+b,0);
+        const summary = document.getElementById('spiImportSummary');
+        summary.className = 'spi-import-summary visible';
+        summary.innerHTML = `
+          <div class="spi-summary-grid">
+            <div class="spi-stat"><div class="spi-stat-label">Week</div><div class="spi-stat-value ok">${data.week_label}</div></div>
+            <div class="spi-stat"><div class="spi-stat-label">F&amp;G Tags</div><div class="spi-stat-value">${data.fgs_count}</div></div>
+            <div class="spi-stat"><div class="spi-stat-label">Total Rows</div><div class="spi-stat-value">${data.total_rows.toLocaleString()}</div></div>
+            <div class="spi-stat"><div class="spi-stat-label">Flagged</div><div class="spi-stat-value ${flagged>0?'warn':'ok'}">${flagged}</div></div>
+          </div>
+          ${flagged > 0 ? '<div style="font-size:0.8rem;color:#858585;">' +
+            Object.entries(fc).map(([k,v]) => `<span class="flag-badge flag-${k}">${_FLAG_LABELS[k]||k}: ${v}</span>`).join('') +
+            '</div>' : ''}`;
+
+        await loadSpiHistory();
+      } catch(e) {
+        setStatus('spiUploadStatus', 'error', 'Import failed — see log.');
+      }
+    }
+
+    async function loadSpiHistory() {
+      const res = await fetch('/api/spi/imports');
+      const data = await res.json();
+      const el = document.getElementById('spiHistory');
+      if (!data.imports || !data.imports.length) {
+        el.innerHTML = '<span style="color:#555;font-size:0.85rem;">No imports yet.</span>'; return;
+      }
+      el.innerHTML = data.imports.map(imp => {
+        const dt = imp.imported_at ? imp.imported_at.replace('T',' ').slice(0,16) + ' UTC' : '';
+        return `<div class="spi-history-row">
+          <span class="spi-week">${imp.week_label}</span>
+          <span style="color:#cccccc;font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${imp.filename}</span>
+          <span class="spi-fgs-count">${imp.fgs_count} F&amp;G tags</span>
+          <span class="spi-date">${dt}</span>
+          <button class="spi-load-btn" onclick="loadSpiTags(${imp.id})">View</button>
+        </div>`;
+      }).join('');
+    }
+
+    async function loadSpiTags(importId) {
+      if (importId) _spiCurrentImportId = importId;
+      const system1  = document.getElementById('spiFilterSystem').value;
+      const io_type1 = document.getElementById('spiFilterIO').value;
+      const design_by= document.getElementById('spiFilterDesignBy').value;
+      const flagsOnly= document.getElementById('spiFilterFlags').checked ? '1' : '';
+
+      let url = '/api/spi/tags?';
+      if (_spiCurrentImportId) url += 'import_id=' + _spiCurrentImportId + '&';
+      if (system1)  url += 'system1='  + encodeURIComponent(system1)  + '&';
+      if (io_type1) url += 'io_type1=' + encodeURIComponent(io_type1) + '&';
+      if (design_by)url += 'design_by='+ encodeURIComponent(design_by)+ '&';
+      if (flagsOnly) url += 'flags_only=1&';
+
+      const res = await fetch(url);
+      const data = await res.json();
+      document.getElementById('spiRegCount').textContent = data.count + ' tags';
+
+      const tbody = document.getElementById('spiTagBody');
+      if (!data.tags || !data.tags.length) {
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-row">No tags found.</td></tr>'; return;
+      }
+      tbody.innerHTML = data.tags.map(t => {
+        const flags = (t.flags || []).map(f =>
+          `<span class="flag-badge flag-${f}">${_FLAG_LABELS[f]||f}</span>`).join('');
+        return `<tr>
+          <td style="color:#9cdcfe;font-family:Consolas,monospace;white-space:nowrap;">${t.tag_number||'—'}</td>
+          <td>${t.system1||'—'}</td>
+          <td>${t.io_type1||'—'}</td>
+          <td>${t.typical||'<span style="color:#555">—</span>'}</td>
+          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
+          <td>${t.area_class||'<span style="color:#555">—</span>'}</td>
+          <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.unit_name||'—'}</td>
+          <td>${t.design_by||'—'}</td>
+          <td>${t.status||'—'}</td>
+          <td>${flags||'<span style="color:#3c3c3c">—</span>'}</td>
+        </tr>`;
+      }).join('');
+
+      // Switch to register tab
+      document.querySelectorAll('#page-spi .sub-tab').forEach((t,i) => t.classList.toggle('active', i===1));
+      document.getElementById('spi-tab-import').style.display = 'none';
+      document.getElementById('spi-tab-register').style.display = 'block';
+    }
+
     // --- Admin actions ---
     async function reindexEmails() {
       const btn = document.getElementById("reindexBtn");
@@ -1642,6 +1873,8 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("debugSearch").addEventListener("input", applyDebugFilter);
+      setupSpiDropZone();
+      loadSpiHistory();
     });
 
     refreshSpecsQA();

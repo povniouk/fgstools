@@ -221,19 +221,55 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 ---
 
-### Tool 2 — SPI Consistency Checker — PLANNED
+### Tool 2 — SPI Consistency Checker — IN PROGRESS
+
 **Purpose:** Ingest weekly SPI Excel export, run rule-based checks derived from specs, output anomaly report. Store each weekly import in SQLite with timestamp; diff against prior week to surface new issues, resolved issues, and changed fields.
 
-**Note:** Deprioritised until SPI data from HSED HOC and BoOC is complete.
+**SPI data reality (W18 analysis):**
+- 7,683 total rows in export — 198 are F&G (141 FGS + 57 LFGS)
+- Expected ~2500 F&G tags — gap is HOC data missing entirely (only BoOC + COC present)
+- Tag_Type blank for all F&G tags — data quality issue
+- Key columns: Tag_Number, System1, IO_Type1, Typical, Tag_Serv, Area_Class, Unit_name, Design_By, Status
+- No Fire Zone or FGS Layout column in current export — deferred to M5
 
-**Example checks:**
-- Detector type matches spec requirement for the declared Fire Zone
-- All FGS input tags have Software Typical populated
-- Tags in System1=FGS have a Fire Zone assigned
-- No duplicate tag numbers
+**Input:** Weekly SPI Excel export (.xlsx), drag-drop in browser
+**Stack:** `spi_checker.py` Flask Blueprint, SQLite (`spi_imports`, `spi_tags` tables), openpyxl
 
-**Input:** SPI Excel export (~2500 rows)
-**Output:** Delta report (new/changed/resolved) + full anomaly list with tag reference and rule violated
+---
+
+#### Tool 2 — Milestone Plan
+
+**M1 — Import + storage** ✅ IN PROGRESS
+- Drag-drop .xlsx upload on SPI Checker tab (no VS Code needed)
+- Parse Excel, filter F&G tags (System1 = FGS/LFGS)
+- SQLite tables: `spi_imports`, `spi_tags`
+- Import summary: week label, total rows, F&G count, timestamp
+- Import history list (all past imports)
+
+**M2 — F&G tag register**
+- Filterable table of all F&G tags from latest import
+- Filters: System1, IO_Type1, Design_By, flags only
+- Key columns: Tag Number | System | IO Type | Typical | Service | Area Class | Design By | Status | Flags
+
+**M3 — Automated flag checks**
+- Missing Typical
+- Missing Area_Class
+- Blank Tag_Type
+- Status = TBF on key fields
+- Duplicate tag numbers
+- Flag badges per row + summary count at top
+- Flags tab showing only flagged tags
+
+**M4 — Week-over-week diff**
+- On import, compare against previous week
+- New tags, removed tags, changed fields (Typical, Status, Area_Class, etc.)
+- Delta report shown after import, accessible from history
+- Highlight what changed since last week
+
+**M5 — Spec rule checks (deferred until data complete)**
+- Detector type vs fire zone vs spec requirement (needs HOC data + Fire Zone field)
+- All FGS input tags have Typical populated
+- Traceable to spec clause
 
 ---
 
