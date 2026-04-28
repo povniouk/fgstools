@@ -246,7 +246,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Import summary: week label, total rows, F&G count, timestamp
 - Import history list (all past imports)
 
-**M2 — F&G loop register** ← NEXT TO BUILD
+**M2 — F&G loop register** ← NEXT TO BUILD (after email tracker folder refactor — see below)
 - Primary view: **grouped by Loop_Name** — loop row is collapsed by default, click to expand tag sub-rows one at a time
 - Secondary view: flat tag list (toggle)
 - Sorted alphabetically by Loop_Name; no special ordering for missing Typical
@@ -386,6 +386,7 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] Reranker (`bge-reranker-base`) on fgstools LXC — `sentence-transformers` 5.4.1 + `torch` 2.11.0+cpu installed; live and verified
 - [x] Clause Search — `GET /api/search?q=` endpoint; sub-tab in Spec Q&A; keyword completeness scan, term highlighting, PDF page links
 - [x] Tool 2 M1 — SPI import + storage; drag-drop .xlsx in browser; `tool2_spi_checker/` package; System1+System2 FGS detection (W18: 347 F&G tags); flag badges
+- [ ] **NEXT SESSION START:** Refactor `email_tracker.py` → `tool5_email_tracker/` package (same pattern as `tool1_spec_qa/` and `tool2_spi_checker/`). All future tools must follow this folder-per-tool pattern. Then build Tool 2 M2.
 - [x] Tool 5 M1–M7 — Email Tracker complete: import, action register, contacts, side panel, notes log, attachments, email memory RAG
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
