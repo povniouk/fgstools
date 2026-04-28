@@ -7,7 +7,7 @@ import requests
 from collections import deque
 from flask import Flask, request, jsonify, send_from_directory, Response
 from pdf_loader import load_pdf_chunks
-from retriever import find_relevant_chunks
+from retriever import find_relevant_chunks, search_chunks
 import retriever as _retriever
 
 app = Flask(__name__, static_folder="static")
@@ -264,6 +264,34 @@ def delete_spec(filename):
     refresh_cache()
     log_info(f"Deleted spec: {filename}")
     return jsonify({"ok": True})
+
+
+@app.route("/api/search", methods=["GET"])
+def search_clauses():
+    term = request.args.get("q", "").strip()
+    if not term:
+        return jsonify({"error": "q parameter required"}), 400
+    limit = min(int(request.args.get("limit", 50)), 100)
+
+    refresh_cache()
+    if not _combined_chunks:
+        return jsonify({"error": "No specs loaded"}), 400
+
+    results = search_chunks(term, _combined_chunks, _cache_key, max_results=limit)
+    log_info(f"Clause search: '{term}' → {len(results)} result(s)")
+
+    out = [{
+        "text": c["text"],
+        "section": c.get("section", ""),
+        "page": c.get("page", 0),
+        "doc_number": c.get("doc_number", ""),
+        "title": c.get("title", ""),
+        "revision": c.get("revision", ""),
+        "filename": c.get("source", ""),
+        "has_table": c.get("has_table", False),
+    } for c in results]
+
+    return jsonify({"query": term, "count": len(out), "results": out})
 
 
 @app.route("/api/query", methods=["POST"])

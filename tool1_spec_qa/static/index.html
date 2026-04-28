@@ -203,6 +203,25 @@
     .log-warn  .log-msg { color: #dcdcaa; }
     .log-error .log-msg { color: #f44747; }
     body { padding-bottom: 28px; }
+
+    /* Clause Search */
+    .search-bar { display: flex; gap: 8px; }
+    .search-bar input[type="text"] { flex: 1; background: #3c3c3c; border: 1px solid #3c3c3c; border-radius: 2px; padding: 8px 12px; color: #cccccc; font-size: 0.9rem; font-family: inherit; }
+    .search-bar input[type="text"]:focus { outline: none; border-color: #007acc; }
+    .search-count { font-size: 0.8rem; color: #858585; margin: 10px 0 14px; min-height: 18px; }
+    .search-count .count-n { color: #4ec9b0; font-weight: 600; }
+    .search-count .count-fallback { color: #dcdcaa; }
+    .sr-list { display: flex; flex-direction: column; gap: 10px; }
+    .sr-card { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 3px; padding: 12px 14px; }
+    .sr-card:hover { border-color: #555; }
+    .sr-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .sr-ref { font-size: 0.78rem; color: #9cdcfe; font-weight: 600; }
+    .sr-section { font-size: 0.82rem; color: #cccccc; flex: 1; }
+    .sr-page-link { font-size: 0.75rem; color: #858585; text-decoration: none; white-space: nowrap; border: 1px solid #3c3c3c; border-radius: 2px; padding: 2px 8px; flex-shrink: 0; }
+    .sr-page-link:hover { border-color: #007acc; color: #9cdcfe; }
+    .sr-text { font-size: 0.84rem; color: #cccccc; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+    .sr-hl { background: #3a3010; color: #dcdcaa; border-radius: 2px; padding: 0 2px; }
+    .sr-table-badge { font-size: 0.65rem; background: #1a2a3a; color: #4ec9b0; border-radius: 2px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -263,6 +282,7 @@
       <!-- Sub-nav -->
       <div class="sub-nav">
         <div class="sub-tab active" onclick="showSubPage('qa', this)">Q&amp;A</div>
+        <div class="sub-tab" onclick="showSubPage('search', this)">Clause Search</div>
         <div class="sub-tab" onclick="showSubPage('manage', this)">Manage Specs</div>
       </div>
 
@@ -315,6 +335,19 @@
           <h2>Answer</h2>
           <div class="answer-box empty" id="answerBox">Answer will appear here.</div>
           <div class="sources" id="sourcesBox"></div>
+        </div>
+      </div>
+
+      <!-- Clause Search sub-page -->
+      <div id="subpage-search" style="display:none">
+        <div class="section">
+          <div class="section-header"><h2>Clause Search</h2></div>
+          <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="e.g. open path detection, Building 045, PA/GA, HVAC interface..." onkeydown="if(event.key==='Enter')runSearch()">
+            <button onclick="runSearch()" id="searchBtn">Search</button>
+          </div>
+          <div class="search-count" id="searchCount"></div>
+          <div class="sr-list" id="searchResults"></div>
         </div>
       </div>
 
@@ -813,6 +846,71 @@
         if (data.ok) { refreshSpecsManage(); refreshSpecsQA(); }
         else { btn.textContent = "Error"; }
       } catch { btn.textContent = "Error"; }
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function highlightTerms(text, term) {
+      const escaped = escapeHtml(text);
+      const words = term.trim().split(/\s+/).filter(w => w.length >= 2);
+      if (!words.length) return escaped;
+      const pattern = new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+      return escaped.replace(pattern, '<span class="sr-hl">$1</span>');
+    }
+
+    async function runSearch() {
+      const term = document.getElementById("searchInput").value.trim();
+      if (!term) return;
+      const btn = document.getElementById("searchBtn");
+      const countEl = document.getElementById("searchCount");
+      const listEl = document.getElementById("searchResults");
+
+      btn.disabled = true;
+      btn.textContent = "Searching…";
+      countEl.innerHTML = '<span class="spinner"></span>';
+      listEl.innerHTML = "";
+
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(term)}&limit=50`);
+        const data = await res.json();
+        btn.disabled = false;
+        btn.textContent = "Search";
+
+        if (data.error) { countEl.textContent = data.error; return; }
+
+        const fallback = data.count > 0 && data.results[0]._fallback;
+        const specs = [...new Set(data.results.map(r => r.doc_number).filter(Boolean))];
+        const specCount = specs.length;
+
+        if (data.count === 0) {
+          countEl.innerHTML = `No results for <strong>${escapeHtml(term)}</strong>`;
+        } else {
+          countEl.innerHTML = `<span class="count-n">${data.count}</span> result${data.count !== 1 ? 's' : ''} across ${specCount} spec${specCount !== 1 ? 's' : ''}` +
+            (fallback ? ' <span class="count-fallback">(partial match)</span>' : '');
+        }
+
+        listEl.innerHTML = data.results.map(r => {
+          const ref = `${r.doc_number} Rev.${r.revision}`;
+          const pageLink = r.filename && r.page
+            ? `<a class="sr-page-link" href="/pdf/${encodeURIComponent(r.filename)}#page=${r.page}" target="_blank">p.${r.page}</a>`
+            : '';
+          const tableBadge = r.has_table ? '<span class="sr-table-badge">TABLE</span>' : '';
+          return `<div class="sr-card">
+            <div class="sr-header">
+              <span class="sr-ref">${escapeHtml(ref)}</span>
+              <span class="sr-section">${escapeHtml(r.section)}${tableBadge}</span>
+              ${pageLink}
+            </div>
+            <div class="sr-text">${highlightTerms(r.text, term)}</div>
+          </div>`;
+        }).join('');
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "Search";
+        countEl.textContent = "Search failed — see log.";
+      }
     }
 
     async function askQuestion() {

@@ -265,6 +265,37 @@ class SpecIndex:
         ordered = sorted(top_indices, key=lambda i: combined[i], reverse=True)
         return [self.chunks[i] for i in ordered]
 
+    def search_chunks(self, term, max_results=50):
+        """Return all chunks containing every word of term, ranked by BM25.
+        Falls back to any-word match if no all-word matches found."""
+        if not self.chunks or self.bm25 is None:
+            return []
+        term_lower = term.lower().strip()
+        if not term_lower:
+            return []
+        words = re.findall(r'[a-z0-9]+', term_lower)
+        words = [w for w in words if len(w) >= 2]
+        if not words:
+            return []
+
+        # All-word match first (completeness)
+        matches = [
+            i for i, chunk in enumerate(self.chunks)
+            if all(w in chunk["text"].lower() for w in words)
+        ]
+        # Any-word fallback
+        if not matches:
+            matches = [
+                i for i, chunk in enumerate(self.chunks)
+                if any(w in chunk["text"].lower() for w in words)
+            ]
+        if not matches:
+            return []
+
+        bm25_scores = self.bm25.get_scores(_tokenize(term))
+        matches.sort(key=lambda i: bm25_scores[i], reverse=True)
+        return [self.chunks[i] for i in matches[:max_results]]
+
 
 spec_index = SpecIndex()
 
@@ -304,6 +335,13 @@ def _rerank(question, candidates, top_n=5):
     except Exception as e:
         _log(f"Re-ranking failed ({e}) — using retrieval order.")
         return candidates[:top_n]
+
+
+def search_chunks(term, chunks, cache_key, max_results=50):
+    """Return all chunks containing term — completeness scan, not top-K RAG."""
+    if spec_index.cache_key != cache_key:
+        spec_index.build(chunks, cache_key)
+    return spec_index.search_chunks(term, max_results=max_results)
 
 
 def find_relevant_chunks(question, chunks, cache_key, top_k=6):

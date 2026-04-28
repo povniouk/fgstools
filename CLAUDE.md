@@ -133,16 +133,15 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 | PDF table extraction | ✅ Done | pdfplumber + bullet-point format |
 | Table atomicity | ✅ Done | Atomic chunks with prose context prefix |
 | Semantic embeddings | ✅ Done | `nomic-embed-text` via Ollama, cached to `.npy` |
-| Cross-encoder re-ranker | ✅ Done | `bge-reranker-base` via `sentence-transformers` on fgstools LXC (CPU); install in progress |
+| Cross-encoder re-ranker | ✅ Done | `bge-reranker-base` via `sentence-transformers` on fgstools LXC (CPU); installed and live |
 | Email memory (RAG) | ✅ Done | Approved emails chunked + embedded in `cwlng.db`; searchable via Email history toggle |
 | Word-count chunking | ⚠️ Partial | Prose chunks word-count based; semantic chunking deferred |
 | Vocabulary mismatch | ⚠️ Partial | Synonym dict + embeddings. Works for known terms. |
 
-**Re-ranker install status:**
-- `bge-reranker-base` runs locally on fgstools LXC via `sentence-transformers`
-- `torch` (CPU-only) install in progress on LXC — was killed by OOM at 2GB RAM; RAM bumped to 2GB, retry in progress
-- Once installed: no restart needed — retriever loads model lazily on first query, falls back gracefully if unavailable
-- Retriever already wired: fetches 3×top_k candidates, re-ranks to top_k
+**Re-ranker install status:** ✅ Complete
+- `bge-reranker-base` installed and live on fgstools LXC (`sentence-transformers` 5.4.1, `torch` 2.11.0+cpu)
+- Lazy-loads on first query; model cached locally after first load (~270MB)
+- Retriever fetches 3×top_k candidates, re-ranks to top_k
 
 ---
 
@@ -257,9 +256,16 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 ---
 
 ### Additional tools considered (brainstorm, not yet scoped)
-- **Document submittal register** — track IFR / IFC / IFA status per document, highlight overdue items
+- **Document submittal register (Tool 8 candidate)** — replaces manual GAIA monitoring; import GAIA Excel export, diff against previous import, surface new revisions and status changes (the notification GAIA doesn't send); each document has TEN ref + client ref, revisions A/B/C→00/01/02, statuses IFI/IFR/IFC/IFA/IFD etc.; new spec revision detected → trigger Tool 4 (revision delta); ingestion: periodic Excel export (SSO-only, no API)
 - **Meeting minutes action extractor** — paste or forward meeting minutes, AI extracts action items with owners and deadlines
 - **Overview / KPI dashboard** — open actions count, pending reviews, last SPI import, spec revision alerts
+- **Detector type cards (Tool 6 candidate)** — one card per F&G detector type (IR point gas, catalytic bead, open path, UV/IR flame, heat, smoke, MCP, etc.); each card shows governing spec clause(s), typical application, voting logic, test/maintenance interval; auto-populated via RAG on first build then cached; SPI tag counts + fire zones added as second phase once SPI data is complete
+- **System interface map (Tool 7 candidate)** — interactive node-graph of FGS interfaces: FGS↔SIS, FGS↔BPCS, FGS↔PA/GA, FGS↔HVAC, FGS↔FACP, FACP↔buildings; each edge carries signal direction, governing spec clause, and status (defined/pending/open query); click-through to spec clause + related emails; starts as manually-built editable diagram, bundled JS graph lib (no CDN)
+- **Deadline digest** — "this week / overdue" widget on the Overview tab surfacing action items by due date; built on existing action_items table; requires no new data, just a view
+- **Comment response tracker** — per document revision, log client review comments with status (open / responded / accepted / rejected); ties into GAIA register (new IFR submission opens a comment log); tracks formal audit trail for document review cycle
+- **Technical Query (TQ) register** — dedicated register for TQs between contractor and client; fields: TQ number, subject, originator, linked spec clause, status, linked email; email tracker already captures TQs as a category — this promotes them to a first-class register
+- **Spec clause reverse lookup** ✅ DONE — keyword/tag search (`GET /api/search?q=`) returning all chunks that contain the term; sub-tab "Clause Search" in Spec Q&A; results with highlighted terms, TABLE badge, clickable PDF page links; no LLM, near-instant
+- **Weekly summary generator** — auto-generated one-page digest: open actions, overdue items, new document releases, new emails from past 7 days; all data already in SQLite, mostly a reporting query; useful for personal review and team status updates
 
 ---
 
@@ -336,7 +342,7 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] GitHub repo initialised (`fgstools`), SSH key set up, initial commit pushed
 - [x] Convert app to systemd service on `fgstools` LXC (`/etc/systemd/system/fgstools.service`, enabled, starts on boot)
 - [x] Dashboard rebuild — multi-tab architecture (Overview, Spec Q&A, Email Tracker, SPI Checker, C&E Checker, Admin)
-- [ ] Reranker (`bge-reranker-base`) on fgstools LXC — `sentence-transformers` + CPU torch install in progress; retriever already wired, falls back gracefully if not yet installed
+- [x] Reranker (`bge-reranker-base`) on fgstools LXC — `sentence-transformers` 5.4.1 + `torch` 2.11.0+cpu installed; live and verified
 - [x] Tool 5 M1–M7 — Email Tracker complete: import, action register, contacts, side panel, notes log, attachments, email memory RAG
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
