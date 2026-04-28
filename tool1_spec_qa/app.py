@@ -27,7 +27,7 @@ from email_tracker import retrieve_email_chunks
 app.register_blueprint(_email_tracker.bp)
 _email_tracker._current_model = current_model  # share live model reference
 
-import spi_checker as _spi_checker
+import tool2_spi_checker as _spi_checker
 app.register_blueprint(_spi_checker.bp)
 
 # Log buffer — keeps last 200 entries, streams to connected clients

@@ -18,6 +18,7 @@ _COLS = [
     'tag_serv', 'area_class', 'unit_name', 'design_by', 'status',
     'loop_name', 'plant_area', 'instr_type', 'instr_desc',
     'area', 'cwa', 'ex_type', 'signal_type', 'io_type2', 'system2',
+    'fgs_via_system2',  # flag: True when FGS assignment is in System2
 ]
 
 _COL_MAP = {
@@ -49,31 +50,33 @@ def init_db():
             fgs_count   INTEGER
         );
         CREATE TABLE IF NOT EXISTS spi_tags (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            import_id   INTEGER REFERENCES spi_imports(id) ON DELETE CASCADE,
-            tag_number  TEXT,
-            tag_type    TEXT,
-            system1     TEXT,
-            io_type1    TEXT,
-            typical     TEXT,
-            tag_serv    TEXT,
-            area_class  TEXT,
-            unit_name   TEXT,
-            design_by   TEXT,
-            status      TEXT,
-            loop_name   TEXT,
-            plant_area  TEXT,
-            instr_type  TEXT,
-            instr_desc  TEXT,
-            area        TEXT,
-            cwa         TEXT,
-            ex_type     TEXT,
-            signal_type TEXT,
-            io_type2    TEXT,
-            system2     TEXT
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            import_id       INTEGER REFERENCES spi_imports(id) ON DELETE CASCADE,
+            tag_number      TEXT,
+            tag_type        TEXT,
+            system1         TEXT,
+            io_type1        TEXT,
+            typical         TEXT,
+            tag_serv        TEXT,
+            area_class      TEXT,
+            unit_name       TEXT,
+            design_by       TEXT,
+            status          TEXT,
+            loop_name       TEXT,
+            plant_area      TEXT,
+            instr_type      TEXT,
+            instr_desc      TEXT,
+            area            TEXT,
+            cwa             TEXT,
+            ex_type         TEXT,
+            signal_type     TEXT,
+            io_type2        TEXT,
+            system2         TEXT,
+            fgs_via_system2 INTEGER DEFAULT 0
         );
-        CREATE INDEX IF NOT EXISTS idx_spi_tags_import ON spi_tags(import_id);
-        CREATE INDEX IF NOT EXISTS idx_spi_tags_system ON spi_tags(system1);
+        CREATE INDEX IF NOT EXISTS idx_spi_tags_import  ON spi_tags(import_id);
+        CREATE INDEX IF NOT EXISTS idx_spi_tags_system1 ON spi_tags(system1);
+        CREATE INDEX IF NOT EXISTS idx_spi_tags_system2 ON spi_tags(system2);
     """)
     db.commit()
     db.close()
@@ -114,13 +117,20 @@ def parse_spi_excel(filepath):
         if not any(v is not None and str(v).strip() not in ('', '-') for v in row[:20]):
             continue
         total += 1
+
         sys1 = _val(row, h.get('System1'))
-        if sys1 not in FGS_SYSTEMS:
+        sys2 = _val(row, h.get('System2'))
+        fgs_via_sys2 = sys1 not in FGS_SYSTEMS and sys2 in FGS_SYSTEMS
+
+        if sys1 not in FGS_SYSTEMS and not fgs_via_sys2:
             continue
-        tag = {col: _val(row, h.get(_COL_MAP[col])) for col in _COLS}
-        # Normalise tag number (SPI sometimes has extra spaces)
+
+        tag = {col: _val(row, h.get(_COL_MAP[col])) for col in _COL_MAP}
+        tag['fgs_via_system2'] = 1 if fgs_via_sys2 else 0
+
         if tag['tag_number']:
             tag['tag_number'] = re.sub(r'\s+', ' ', tag['tag_number']).strip()
+
         tags.append(tag)
 
     return tags, total
@@ -136,6 +146,8 @@ def _compute_flags(tag):
         flags.append('missing_tag_type')
     if tag.get('status') == 'TBF':
         flags.append('status_tbf')
+    if tag.get('fgs_via_system2'):
+        flags.append('via_system2')
     return flags
 
 
@@ -172,20 +184,22 @@ def import_spi():
     )
     import_id = cur.lastrowid
 
+    insert_cols = [c for c in _COLS if c != 'fgs_via_system2'] + ['fgs_via_system2']
     db.executemany(
-        f"INSERT INTO spi_tags (import_id, {', '.join(_COLS)}) VALUES (:import_id, {', '.join(':'+c for c in _COLS)})",
+        f"INSERT INTO spi_tags (import_id, {', '.join(insert_cols)}) "
+        f"VALUES (:import_id, {', '.join(':'+c for c in insert_cols)})",
         [{**t, 'import_id': import_id} for t in tags]
     )
     db.commit()
 
-    # Flag counts for summary
     flag_counts = {}
     for t in tags:
         for flag in _compute_flags(t):
             flag_counts[flag] = flag_counts.get(flag, 0) + 1
 
     db.close()
-    _log(f"[SPI] Done: {len(tags)} F&G tags from {total_rows} total rows — flags: {flag_counts}")
+    _log(f"[SPI] Done: {len(tags)} F&G tags ({flag_counts.get('via_system2',0)} via System2) "
+         f"from {total_rows} total rows — flags: {flag_counts}")
     return jsonify({
         'ok': True, 'import_id': import_id, 'week_label': week_label,
         'total_rows': total_rows, 'fgs_count': len(tags), 'flag_counts': flag_counts,
@@ -202,10 +216,10 @@ def list_imports():
 
 @bp.route('/api/spi/tags', methods=['GET'])
 def get_tags():
-    import_id = request.args.get('import_id')
-    system1   = request.args.get('system1', '')
-    io_type1  = request.args.get('io_type1', '')
-    design_by = request.args.get('design_by', '')
+    import_id  = request.args.get('import_id')
+    system1    = request.args.get('system1', '')
+    io_type1   = request.args.get('io_type1', '')
+    design_by  = request.args.get('design_by', '')
     flags_only = request.args.get('flags_only', '')
 
     db = get_db()
@@ -219,7 +233,9 @@ def get_tags():
     q = "SELECT * FROM spi_tags WHERE import_id = ?"
     params = [import_id]
     if system1:
-        q += " AND system1 = ?"; params.append(system1)
+        # Match System1 OR System2 so FGS tags assigned via secondary system appear
+        q += " AND (system1 = ? OR system2 = ?)"
+        params.extend([system1, system1])
     if io_type1:
         q += " AND io_type1 = ?"; params.append(io_type1)
     if design_by:
