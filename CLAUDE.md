@@ -246,10 +246,15 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Import summary: week label, total rows, F&G count, timestamp
 - Import history list (all past imports)
 
-**M2 — F&G tag register**
-- Filterable table of all F&G tags from latest import
-- Filters: System1, IO_Type1, Design_By, flags only
-- Key columns: Tag Number | System | IO Type | Typical | Service | Area Class | Design By | Status | Flags
+**M2 — F&G loop register** ← NEXT TO BUILD
+- Primary view: **grouped by Loop_Name** — loop row is collapsed by default, click to expand tag sub-rows one at a time
+- Secondary view: flat tag list (toggle)
+- Sorted alphabetically by Loop_Name; no special ordering for missing Typical
+- Filters: System1/System2, IO_Type1, Design_By; **Warnings filter** to show only loops with issues
+- Warnings column on each loop row (filterable): missing Typical, inconsistent Typical within loop (tags have different Typical values), missing Area Class on any tag in loop
+- Key columns per loop row: Loop_Name | Typical | Tag Count | Warnings
+- Key columns per tag sub-row: Tag Number | System1 | System2 | IO Type | Service | Area Class | Design By | Status | Flags
+- Loop_Name format confirmed correct (e.g. `A -001001`)
 
 **M3 — Automated flag checks**
 - Missing Typical
@@ -379,6 +384,8 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] Convert app to systemd service on `fgstools` LXC (`/etc/systemd/system/fgstools.service`, enabled, starts on boot)
 - [x] Dashboard rebuild — multi-tab architecture (Overview, Spec Q&A, Email Tracker, SPI Checker, C&E Checker, Admin)
 - [x] Reranker (`bge-reranker-base`) on fgstools LXC — `sentence-transformers` 5.4.1 + `torch` 2.11.0+cpu installed; live and verified
+- [x] Clause Search — `GET /api/search?q=` endpoint; sub-tab in Spec Q&A; keyword completeness scan, term highlighting, PDF page links
+- [x] Tool 2 M1 — SPI import + storage; drag-drop .xlsx in browser; `tool2_spi_checker/` package; System1+System2 FGS detection (W18: 347 F&G tags); flag badges
 - [x] Tool 5 M1–M7 — Email Tracker complete: import, action register, contacts, side panel, notes log, attachments, email memory RAG
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
