@@ -246,7 +246,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Import summary: week label, total rows, F&G count, timestamp
 - Import history list (all past imports)
 
-**M2 — F&G loop register** ← NEXT TO BUILD (after email tracker folder refactor — see below)
+**M2 — F&G loop register** ✅ DONE
 - Primary view: **grouped by Loop_Name** — loop row is collapsed by default, click to expand tag sub-rows one at a time
 - Secondary view: flat tag list (toggle)
 - Sorted alphabetically by Loop_Name; no special ordering for missing Typical
@@ -256,7 +256,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Key columns per tag sub-row: Tag Number | System1 | System2 | IO Type | Service | Area Class | Design By | Status | Flags
 - Loop_Name format confirmed correct (e.g. `A -001001`)
 
-**M3 — Automated flag checks**
+**M3 — Automated flag checks** ← NEXT TO BUILD
 - Missing Typical
 - Missing Area_Class
 - Blank Tag_Type
@@ -386,7 +386,8 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] Reranker (`bge-reranker-base`) on fgstools LXC — `sentence-transformers` 5.4.1 + `torch` 2.11.0+cpu installed; live and verified
 - [x] Clause Search — `GET /api/search?q=` endpoint; sub-tab in Spec Q&A; keyword completeness scan, term highlighting, PDF page links
 - [x] Tool 2 M1 — SPI import + storage; drag-drop .xlsx in browser; `tool2_spi_checker/` package; System1+System2 FGS detection (W18: 347 F&G tags); flag badges
-- [ ] **NEXT SESSION START:** Refactor `email_tracker.py` → `tool5_email_tracker/` package (same pattern as `tool1_spec_qa/` and `tool2_spi_checker/`). All future tools must follow this folder-per-tool pattern. Then build Tool 2 M2.
+- [x] `email_tracker.py` → `tool5_email_tracker/` package (code in `__init__.py` to preserve `_log`/`_current_model` shared-reference semantics)
+- [x] Tool 2 M2 — Loop register: `/api/spi/loops`, collapsible loop rows, inline tag sub-rows, loop-level warnings (missing typical, inconsistent typical, missing area class), Warnings-only filter; "View" in history goes to loop register
 - [x] Tool 5 M1–M7 — Email Tracker complete: import, action register, contacts, side panel, notes log, attachments, email memory RAG
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
