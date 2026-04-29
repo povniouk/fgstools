@@ -152,6 +152,16 @@ def _compute_flags(tag):
     return flags
 
 
+def _duplicate_tag_numbers(db, import_id):
+    """Returns the set of tag_numbers that appear more than once in this import."""
+    rows = db.execute(
+        "SELECT tag_number FROM spi_tags WHERE import_id=? AND tag_number IS NOT NULL "
+        "GROUP BY tag_number HAVING COUNT(*) > 1",
+        (import_id,)
+    ).fetchall()
+    return {r['tag_number'] for r in rows}
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @bp.route('/api/spi/import', methods=['POST'])
@@ -243,10 +253,13 @@ def get_tags():
         q += " AND design_by = ?"; params.append(design_by)
 
     tags = [dict(r) for r in db.execute(q, params).fetchall()]
+    dupes = _duplicate_tag_numbers(db, import_id)
     db.close()
 
     for t in tags:
         t['flags'] = _compute_flags(t)
+        if t.get('tag_number') in dupes:
+            t['flags'].append('duplicate_tag')
 
     if flags_only:
         tags = [t for t in tags if t['flags']]
@@ -282,10 +295,13 @@ def get_loops():
     q += " ORDER BY tag_number"
 
     tags = [dict(r) for r in db.execute(q, params).fetchall()]
+    dupes = _duplicate_tag_numbers(db, import_id)
     db.close()
 
     for t in tags:
         t['flags'] = _compute_flags(t)
+        if t.get('tag_number') in dupes:
+            t['flags'].append('duplicate_tag')
 
     # Group by loop_name; null/blank → '' key, sorted to end
     loops_map = defaultdict(list)
@@ -321,6 +337,13 @@ def get_loops():
             'tags': loop_tags,
         })
 
+    # Summary counts across all (pre-warnings-filter) loops
+    flag_summary = {}
+    for loop in loops:
+        for tag in loop['tags']:
+            for f in tag.get('flags', []):
+                flag_summary[f] = flag_summary.get(f, 0) + 1
+
     if warnings_only:
         loops = [l for l in loops if l['warnings']]
 
@@ -329,4 +352,5 @@ def get_loops():
         'import_id': int(import_id),
         'loop_count': len(loops),
         'tag_count': sum(l['tag_count'] for l in loops),
+        'flag_summary': flag_summary,
     })

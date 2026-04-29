@@ -248,6 +248,9 @@
     .flag-missing_tag_type  { background: #252515; color: #dcdcaa; }
     .flag-status_tbf        { background: #2a1515; color: #f44747; }
     .flag-via_system2       { background: #1a1a30; color: #9b9bff; }
+    .flag-duplicate_tag     { background: #2a1a30; color: #c586c0; }
+    .spi-flag-summary { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; background: #1e1e1e; border: 1px solid #2d2d2d; border-radius: 3px; margin-bottom: 14px; font-size: 0.8rem; }
+    .spi-flag-summary .sfs-total { color: #858585; margin-right: 4px; }
     .spi-tag-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     .spi-tag-table th { text-align: left; padding: 7px 10px; color: #858585; font-weight: 600; border-bottom: 1px solid #3c3c3c; white-space: nowrap; }
     .spi-tag-table td { padding: 6px 10px; border-bottom: 1px solid #2d2d2d; vertical-align: middle; }
@@ -540,6 +543,7 @@
         <div class="sub-tab active" onclick="showSpiTab('import', this)">Import</div>
         <div class="sub-tab" onclick="showSpiTab('loops', this)">Loop Register</div>
         <div class="sub-tab" onclick="showSpiTab('register', this)">Tag Register</div>
+        <div class="sub-tab" onclick="showSpiTab('flags', this)">Flags</div>
       </div>
 
       <!-- Import tab -->
@@ -568,6 +572,7 @@
             <h2>F&amp;G Loop Register</h2>
             <span id="spiLoopCount" style="font-size:0.78rem;color:#858585;"></span>
           </div>
+          <div class="spi-flag-summary" id="spiLoopSummary" style="display:none;"></div>
           <div class="spi-filters">
             <label>System</label>
             <select class="filter-select" id="spiLoopFilterSystem" onchange="loadSpiLoops()">
@@ -654,6 +659,51 @@
               </thead>
               <tbody id="spiTagBody">
                 <tr><td colspan="10" class="empty-row">Import an SPI file to populate the register.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flags tab -->
+      <div id="spi-tab-flags" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <h2>Flagged Tags</h2>
+            <span id="spiFlagCount" style="font-size:0.78rem;color:#858585;"></span>
+          </div>
+          <div class="spi-filters">
+            <label>System</label>
+            <select class="filter-select" id="spiFlagFilterSystem" onchange="loadSpiFlags()">
+              <option value="">All</option>
+              <option value="FGS">FGS</option>
+              <option value="LFGS">LFGS</option>
+            </select>
+            <label>IO Type</label>
+            <select class="filter-select" id="spiFlagFilterIO" onchange="loadSpiFlags()">
+              <option value="">All</option>
+              <option value="AI">AI</option>
+              <option value="DI">DI</option>
+              <option value="DO">DO</option>
+            </select>
+            <label>Design By</label>
+            <select class="filter-select" id="spiFlagFilterDesignBy" onchange="loadSpiFlags()">
+              <option value="">All</option>
+              <option value="BoOC">BoOC</option>
+              <option value="COC">COC</option>
+              <option value="HOC">HOC</option>
+            </select>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="spi-tag-table">
+              <thead>
+                <tr>
+                  <th>Tag Number</th><th>Loop</th><th>System</th><th>IO Type</th>
+                  <th>Typical</th><th>Area Class</th><th>Design By</th><th>Status</th><th>Flags</th>
+                </tr>
+              </thead>
+              <tbody id="spiFlagBody">
+                <tr><td colspan="9" class="empty-row">Import an SPI file to populate.</td></tr>
               </tbody>
             </table>
           </div>
@@ -1771,6 +1821,7 @@
       tab.classList.add('active');
       if (name === 'loops')    loadSpiLoops();
       if (name === 'register') loadSpiTags();
+      if (name === 'flags')    loadSpiFlags();
     }
 
     function setupSpiDropZone() {
@@ -1788,6 +1839,7 @@
     const _FLAG_LABELS = {
       missing_typical: 'No Typical', missing_area_class: 'No Area Class',
       missing_tag_type: 'No Tag Type', status_tbf: 'TBF', via_system2: 'via Sys2',
+      duplicate_tag: 'Duplicate',
     };
 
     async function uploadSpi(file) {
@@ -1915,6 +1967,21 @@
       document.getElementById('spiLoopCount').textContent =
         data.loop_count + ' loops · ' + data.tag_count + ' tags';
 
+      // Flag summary bar
+      const summaryEl = document.getElementById('spiLoopSummary');
+      const fs = data.flag_summary || {};
+      const fsTotal = Object.values(fs).reduce((a,b)=>a+b,0);
+      if (fsTotal > 0) {
+        const fsBadges = Object.entries(fs).map(([k,v]) =>
+          `<span class="flag-badge flag-${k}">${_FLAG_LABELS[k]||k} <strong>${v}</strong></span>`
+        ).join('');
+        summaryEl.innerHTML = `<span class="sfs-total">${fsTotal} flagged</span>${fsBadges}`;
+        summaryEl.style.display = 'flex';
+      } else {
+        summaryEl.innerHTML = '<span style="color:#4ec9b0;">No flags</span>';
+        summaryEl.style.display = 'flex';
+      }
+
       const tbody = document.getElementById('spiLoopBody');
       if (!data.loops || !data.loops.length) {
         tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No loops found.</td></tr>';
@@ -1976,6 +2043,49 @@
       tagsRow.classList.toggle('open', !isOpen);
       expIcon.classList.toggle('open', !isOpen);
       loopRow.classList.toggle('open', !isOpen);
+    }
+
+    async function loadSpiFlags(importId) {
+      if (importId) _spiCurrentImportId = importId;
+      const system1   = document.getElementById('spiFlagFilterSystem').value;
+      const io_type1  = document.getElementById('spiFlagFilterIO').value;
+      const design_by = document.getElementById('spiFlagFilterDesignBy').value;
+
+      let url = '/api/spi/tags?flags_only=1&';
+      if (_spiCurrentImportId) url += 'import_id=' + _spiCurrentImportId + '&';
+      if (system1)   url += 'system1='   + encodeURIComponent(system1)   + '&';
+      if (io_type1)  url += 'io_type1='  + encodeURIComponent(io_type1)  + '&';
+      if (design_by) url += 'design_by=' + encodeURIComponent(design_by) + '&';
+
+      const res = await fetch(url);
+      const data = await res.json();
+      document.getElementById('spiFlagCount').textContent = data.count + ' flagged tags';
+
+      const tbody = document.getElementById('spiFlagBody');
+      if (!data.tags || !data.tags.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-row">No flagged tags found.</td></tr>';
+      } else {
+        tbody.innerHTML = data.tags.map(t => {
+          const flags = (t.flags || []).map(f =>
+            `<span class="flag-badge flag-${f}">${_FLAG_LABELS[f]||f}</span>`).join('');
+          return `<tr>
+            <td style="color:#9cdcfe;font-family:Consolas,monospace;white-space:nowrap;">${t.tag_number||'—'}</td>
+            <td style="color:#858585;font-family:Consolas,monospace;font-size:0.79rem;white-space:nowrap;">${t.loop_name||'—'}</td>
+            <td>${t.system1||'—'}</td>
+            <td>${t.io_type1||'—'}</td>
+            <td>${t.typical||'<span style="color:#555">—</span>'}</td>
+            <td>${t.area_class||'<span style="color:#555">—</span>'}</td>
+            <td>${t.design_by||'—'}</td>
+            <td>${t.status||'—'}</td>
+            <td>${flags}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Switch to flags tab
+      document.querySelectorAll('#page-spi .sub-tab').forEach((t,i) => t.classList.toggle('active', i===3));
+      document.querySelectorAll("[id^='spi-tab-']").forEach(p => p.style.display = 'none');
+      document.getElementById('spi-tab-flags').style.display = 'block';
     }
 
     // --- Admin actions ---
