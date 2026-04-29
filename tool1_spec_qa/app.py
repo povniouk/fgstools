@@ -22,8 +22,8 @@ MAX_THINK_CHARS = int(os.environ.get("MAX_THINK_CHARS", "6000"))
 
 current_model = {"name": MODEL, "think": False}
 
-import email_tracker as _email_tracker
-from email_tracker import retrieve_email_chunks
+import tool5_email_tracker as _email_tracker
+from tool5_email_tracker import retrieve_email_chunks
 app.register_blueprint(_email_tracker.bp)
 _email_tracker._current_model = current_model  # share live model reference
 
