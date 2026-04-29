@@ -256,7 +256,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Key columns per tag sub-row: Tag Number | System1 | System2 | IO Type | Service | Area Class | Design By | Status | Flags
 - Loop_Name format confirmed correct (e.g. `A -001001`)
 
-**M3 — Automated flag checks** ← NEXT TO BUILD
+**M3 — Automated flag checks** ✅ DONE
 - Missing Typical
 - Missing Area_Class
 - Blank Tag_Type
@@ -265,7 +265,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Flag badges per row + summary count at top
 - Flags tab showing only flagged tags
 
-**M4 — Week-over-week diff**
+**M4 — Week-over-week diff** ← NEXT TO BUILD
 - On import, compare against previous week
 - New tags, removed tags, changed fields (Typical, Status, Area_Class, etc.)
 - Delta report shown after import, accessible from history
