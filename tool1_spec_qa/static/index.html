@@ -85,6 +85,8 @@
     /* Email Tracker */
     #emailDropZone { border: 1px dashed #3c3c3c; border-radius: 4px; padding: 36px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
     #emailDropZone:hover { border-color: #007acc; }
+    #meetingDropZone { border: 1px dashed #3c3c3c; border-radius: 4px; padding: 36px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+    #meetingDropZone:hover, #meetingDropZone.drag-over { border-color: #007acc; }
     .draft-card { background: #1e1e1e; border: 1px solid #3c3c3c; border-radius: 3px; padding: 14px 16px; margin-bottom: 12px; }
     .draft-card-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
     .draft-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
@@ -461,6 +463,7 @@
         <div class="sub-tab active" onclick="showEmailTab('import', this)">Import</div>
         <div class="sub-tab" onclick="showEmailTab('register', this)">Action Register</div>
         <div class="sub-tab" onclick="showEmailTab('contacts', this)">Contacts</div>
+        <div class="sub-tab" onclick="showEmailTab('meetings', this)">Meeting Notes</div>
       </div>
 
       <!-- Import sub-page -->
@@ -548,6 +551,49 @@
               <tr><td colspan="7" class="empty-row">No contacts yet.</td></tr>
             </tbody>
           </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Meeting Notes sub-page -->
+      <div id="email-tab-meetings" style="display:none">
+        <div class="section">
+          <h2>Transcribe Meeting Recording</h2>
+          <div id="meetingDropZone">
+            <div style="color:#858585;font-size:0.9rem;">Drag a <strong style="color:#cccccc;">Teams recording (.mp4)</strong> here, or click to select</div>
+            <div style="color:#555;font-size:0.78rem;margin-top:8px;">Also accepts .m4a .mp3 .wav — transcription runs on CPU (~3 min for a 30-min recording)</div>
+            <input type="file" id="meetingFileInput" accept=".mp4,.m4a,.mp3,.wav,.webm" style="display:none" onchange="uploadMeetingFile(this.files[0])">
+          </div>
+          <div class="status" id="meetingUploadStatus"></div>
+        </div>
+
+        <div class="section">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <label style="font-size:0.82rem;color:#858585;text-transform:uppercase;letter-spacing:.06em;">
+              Transcript &mdash; edit before extracting
+            </label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" id="meetingTitle" placeholder="Meeting title (optional)"
+                style="background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;color:#cccccc;padding:5px 10px;font-size:0.83rem;font-family:inherit;width:240px;">
+              <input type="date" id="meetingDate"
+                style="background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;color:#cccccc;padding:5px 8px;font-size:0.83rem;font-family:inherit;">
+              <button class="btn-save" onclick="extractMeetingItems()" id="meetingExtractBtn" disabled>Extract Action Items</button>
+            </div>
+          </div>
+          <textarea id="meetingTranscript" placeholder="Transcript will appear here after upload — or paste meeting notes directly..."
+            style="min-height:220px;font-size:0.83rem;" oninput="onMeetingTranscriptChange()"></textarea>
+        </div>
+
+        <div id="meetingDraftSection" style="display:none">
+          <div class="section">
+            <div class="section-header">
+              <h2>Draft Items &mdash; <span id="meetingDraftMeta" style="color:#cccccc;text-transform:none;font-size:0.82rem;font-weight:400;"></span></h2>
+              <div style="display:flex;gap:8px;">
+                <button class="btn-save" onclick="approveAllMeetingDrafts()">Approve All</button>
+                <button class="btn-del" onclick="clearMeetingDrafts()">Discard All</button>
+              </div>
+            </div>
+            <div id="meetingDraftCards"></div>
           </div>
         </div>
       </div>
@@ -1839,6 +1885,189 @@
       e.preventDefault(); attachDrop.style.borderColor = "#3c3c3c";
       [...e.dataTransfer.files].forEach(f => uploadAttachment(f));
     });
+
+    // --- Meeting Notes ---
+    let _meetingDrafts = [];
+
+    const meetingDZ = document.getElementById("meetingDropZone");
+    meetingDZ.addEventListener("click", () => document.getElementById("meetingFileInput").click());
+    meetingDZ.addEventListener("dragover", e => { e.preventDefault(); meetingDZ.classList.add("drag-over"); });
+    meetingDZ.addEventListener("dragleave", () => { meetingDZ.classList.remove("drag-over"); });
+    meetingDZ.addEventListener("drop", e => {
+      e.preventDefault(); meetingDZ.classList.remove("drag-over");
+      const file = e.dataTransfer.files[0];
+      if (file) uploadMeetingFile(file);
+    });
+
+    async function uploadMeetingFile(file) {
+      setStatus("meetingUploadStatus", "", `Uploading ${file.name}...`);
+      document.getElementById("meetingExtractBtn").disabled = true;
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const res = await fetch("/api/meetings/transcribe", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          setStatus("meetingUploadStatus", "error", data.error || "Transcription failed.");
+          return;
+        }
+        document.getElementById("meetingTranscript").value = data.transcript;
+        document.getElementById("meetingExtractBtn").disabled = false;
+        setStatus("meetingUploadStatus", "ok",
+          `Transcribed ${file.name} — ${data.transcript.length} chars, language: ${data.language||'?'}`);
+      } catch(e) {
+        setStatus("meetingUploadStatus", "error", "Request failed: " + e.message);
+      }
+    }
+
+    function onMeetingTranscriptChange() {
+      const btn = document.getElementById("meetingExtractBtn");
+      btn.disabled = document.getElementById("meetingTranscript").value.trim().length === 0;
+    }
+
+    async function extractMeetingItems() {
+      const transcript = document.getElementById("meetingTranscript").value.trim();
+      if (!transcript) return;
+      const title = document.getElementById("meetingTitle").value.trim() || "Meeting";
+      setStatus("meetingUploadStatus", "", "Extracting action items...");
+      document.getElementById("meetingExtractBtn").disabled = true;
+      try {
+        const res = await fetch("/api/meetings/extract", {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ transcript, title })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          setStatus("meetingUploadStatus", "error", data.error || "Extraction failed.");
+          document.getElementById("meetingExtractBtn").disabled = false;
+          return;
+        }
+        _meetingDrafts = data.items || [];
+        renderMeetingDraftCards(data.title || title);
+        setStatus("meetingUploadStatus", "ok", `${_meetingDrafts.length} item(s) extracted.`);
+      } catch(e) {
+        setStatus("meetingUploadStatus", "error", "Request failed: " + e.message);
+      }
+      document.getElementById("meetingExtractBtn").disabled = false;
+    }
+
+    function renderMeetingDraftCards(title) {
+      document.getElementById("meetingDraftMeta").textContent = title;
+      const box = document.getElementById("meetingDraftCards");
+      if (!_meetingDrafts.length) {
+        box.innerHTML = `<p style="color:#858585;font-size:0.85rem;padding:8px 0;">No action items detected by the model.</p>`;
+      } else {
+        box.innerHTML = _meetingDrafts.map((item, i) => `
+          <div class="draft-card" id="mdraft-${i}">
+            <div class="draft-card-header">
+              <span class="priority-badge p-${item.priority||'Medium'}" id="mpbadge-${i}">${item.priority||'Medium'}</span>
+              <div class="check-row" style="gap:5px;">
+                <input type="checkbox" data-field="blocking_point" id="mbp-${i}"${item.blocking_point?' checked':''} style="accent-color:#f44747;width:13px;height:13px;cursor:pointer;">
+                <label for="mbp-${i}" style="font-size:0.75rem;color:#858585;cursor:pointer;">Blocking</label>
+              </div>
+              <span style="margin-left:auto;display:flex;gap:6px;">
+                <button class="btn-save" onclick="approveMeetingDraft(${i})">Approve</button>
+                <button class="btn-del" onclick="discardMeetingDraft(${i})">Discard</button>
+              </span>
+            </div>
+            <div class="draft-fields">
+              <div class="draft-field full">
+                <label>Action</label>
+                <textarea data-field="action">${escHtml(item.action||'')}</textarea>
+              </div>
+              <div class="draft-field">
+                <label>Discipline</label>
+                <select data-field="discipline">${opts(_DISC, item.discipline||'')}</select>
+              </div>
+              <div class="draft-field">
+                <label>Scope</label>
+                <select data-field="scope">${opts(_SCOPE, item.scope||'')}</select>
+              </div>
+              <div class="draft-field">
+                <label>Priority</label>
+                <select data-field="priority" onchange="syncMeetingPriority(${i},this.value)">${opts(_PRI, item.priority||'Medium')}</select>
+              </div>
+              <div class="draft-field">
+                <label>Deadline</label>
+                <input type="date" data-field="deadline" value="${item.deadline||''}">
+              </div>
+            </div>
+          </div>`).join('');
+      }
+      document.getElementById("meetingDraftSection").style.display = "block";
+    }
+
+    function syncMeetingPriority(i, val) {
+      const badge = document.getElementById(`mpbadge-${i}`);
+      if (badge) { badge.className = `priority-badge p-${val}`; badge.textContent = val; }
+    }
+
+    function getMeetingDraftData(i) {
+      const card = document.getElementById(`mdraft-${i}`);
+      if (!card) return null;
+      const item = {};
+      card.querySelectorAll("[data-field]").forEach(el => {
+        item[el.dataset.field] = el.type === "checkbox" ? el.checked : el.value.trim();
+      });
+      return item;
+    }
+
+    async function approveMeetingDraft(i) {
+      const item = getMeetingDraftData(i);
+      if (!item) return;
+      const title = document.getElementById("meetingTitle").value.trim() || "Meeting";
+      const recorded_date = document.getElementById("meetingDate").value || "";
+      const transcript = document.getElementById("meetingTranscript").value.trim();
+      const res = await fetch("/api/meetings/approve", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ title, recorded_date, transcript, items: [item] })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        document.getElementById(`mdraft-${i}`).remove();
+        if (!document.querySelector(".draft-card[id^='mdraft-']"))
+          document.getElementById("meetingDraftCards").innerHTML =
+            `<p style="color:#4ec9b0;font-size:0.85rem;padding:8px 0;">All items approved.</p>`;
+      }
+    }
+
+    async function approveAllMeetingDrafts() {
+      const items = [];
+      document.querySelectorAll("[id^='mdraft-']").forEach(card => {
+        const idx = parseInt(card.id.replace("mdraft-", ""));
+        const item = getMeetingDraftData(idx);
+        if (item) items.push(item);
+      });
+      if (!items.length) return;
+      const title = document.getElementById("meetingTitle").value.trim() || "Meeting";
+      const recorded_date = document.getElementById("meetingDate").value || "";
+      const transcript = document.getElementById("meetingTranscript").value.trim();
+      const res = await fetch("/api/meetings/approve", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ title, recorded_date, transcript, items })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        document.getElementById("meetingDraftCards").innerHTML =
+          `<p style="color:#4ec9b0;font-size:0.85rem;padding:8px 0;">${data.saved} item(s) approved and added to the register.</p>`;
+        setStatus("meetingUploadStatus", "ok", `${data.saved} item(s) approved.`);
+      }
+    }
+
+    function discardMeetingDraft(i) {
+      const card = document.getElementById(`mdraft-${i}`);
+      if (card) card.remove();
+      if (!document.querySelector("[id^='mdraft-']"))
+        document.getElementById("meetingDraftCards").innerHTML =
+          `<p style="color:#858585;font-size:0.85rem;padding:8px 0;">All items discarded.</p>`;
+    }
+
+    function clearMeetingDrafts() {
+      document.getElementById("meetingDraftCards").innerHTML = "";
+      document.getElementById("meetingDraftSection").style.display = "none";
+      _meetingDrafts = [];
+      setStatus("meetingUploadStatus", "", "");
+    }
 
     // --- SPI Checker ---
     let _spiCurrentImportId = null;

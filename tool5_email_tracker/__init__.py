@@ -17,6 +17,7 @@ bp = Blueprint("email_tracker", __name__)
 DB_PATH        = os.environ.get("DB_PATH", "cwlng.db")
 OLLAMA_URL     = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 ATTACHMENTS_DIR = os.environ.get("ATTACHMENTS_DIR", "attachments")
+MEETINGS_DIR   = os.environ.get("MEETINGS_DIR", "meetings")
 
 # Shared with app.py current_model dict after registration — set by app.py
 _current_model = {"name": os.environ.get("OLLAMA_MODEL", "gemma4:latest")}
@@ -100,10 +101,21 @@ def init_db():
             updated_at       TEXT
         );
     """)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS meetings (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            title         TEXT    DEFAULT '',
+            recorded_date TEXT    DEFAULT '',
+            transcript    TEXT    DEFAULT '',
+            created_at    TEXT
+        );
+    """)
     os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
+    os.makedirs(MEETINGS_DIR, exist_ok=True)
     # Migrations for existing databases
     for col in [
         "ALTER TABLE action_items ADD COLUMN scope TEXT DEFAULT ''",
+        "ALTER TABLE action_items ADD COLUMN meeting_id INTEGER",
     ]:
         try:
             conn.execute(col)
@@ -809,3 +821,106 @@ def delete_attachment_route(attachment_id):
         conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+# --- Meeting Transcription ---
+
+@bp.route("/api/meetings/transcribe", methods=["POST"])
+def transcribe_meeting():
+    if "file" not in request.files:
+        return jsonify({"error": "No file"}), 400
+    f = request.files["file"]
+    original_name = f.filename or "recording"
+    suffix = os.path.splitext(original_name)[1].lower() or ".mp4"
+    allowed = {".mp4", ".m4a", ".mp3", ".wav", ".webm", ".ogg"}
+    if suffix not in allowed:
+        return jsonify({"error": f"Unsupported format: {suffix}. Use mp4, m4a, mp3, wav."}), 400
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=MEETINGS_DIR) as tmp:
+            f.save(tmp.name)
+            tmp_path = tmp.name
+
+        _log(f"[meetings] Transcribing {original_name} ({os.path.getsize(tmp_path)//1024} KB)...")
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            return jsonify({"error": "faster-whisper is not installed on this server"}), 500
+
+        model = WhisperModel("base", device="cpu", compute_type="int8")
+        segments, info = model.transcribe(tmp_path, beam_size=5)
+        parts = [seg.text.strip() for seg in segments]
+        transcript = " ".join(parts)
+        _log(f"[meetings] Done: {len(transcript)} chars, language={info.language}")
+    except Exception as e:
+        _log(f"[meetings] Transcription error: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+    return jsonify({"ok": True, "transcript": transcript, "filename": original_name,
+                    "language": info.language})
+
+
+@bp.route("/api/meetings/extract", methods=["POST"])
+def extract_meeting_items():
+    data = request.json or {}
+    transcript = data.get("transcript", "").strip()
+    title = data.get("title", "Meeting").strip() or "Meeting"
+    if not transcript:
+        return jsonify({"error": "No transcript provided"}), 400
+
+    items = extract_items(transcript, subject=title, sender="Meeting")
+    for item in items:
+        item["category"] = "Meeting action"
+
+    return jsonify({"ok": True, "items": items, "title": title})
+
+
+@bp.route("/api/meetings/approve", methods=["POST"])
+def approve_meeting_items():
+    data = request.json or {}
+    title = data.get("title", "Meeting")
+    recorded_date = data.get("recorded_date", "")
+    transcript = data.get("transcript", "")
+    items = data.get("items", [])
+    if not items:
+        return jsonify({"ok": True, "saved": 0})
+
+    now = datetime.datetime.now().isoformat()
+    conn = get_db()
+
+    # Save meeting record
+    cur = conn.execute(
+        "INSERT INTO meetings (title, recorded_date, transcript, created_at) VALUES (?,?,?,?)",
+        (title, recorded_date, transcript, now),
+    )
+    meeting_id = cur.lastrowid
+
+    for item in items:
+        conn.execute(
+            "INSERT INTO action_items "
+            "(email_id, meeting_id, discipline, scope, action, blocking_point, "
+            " deadline, category, priority, status, notes, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (None,
+             meeting_id,
+             item.get("discipline", ""),
+             item.get("scope", ""),
+             item.get("action", ""),
+             1 if item.get("blocking_point") else 0,
+             item.get("deadline", ""),
+             "Meeting action",
+             item.get("priority", "Medium"),
+             "Open",
+             "",
+             now),
+        )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "saved": len(items), "meeting_id": meeting_id})
