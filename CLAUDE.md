@@ -265,13 +265,13 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Flag badges per row + summary count at top
 - Flags tab showing only flagged tags
 
-**M4 — Week-over-week diff** ← NEXT TO BUILD
+**M4 — Week-over-week diff** ✅ DONE
 - On import, compare against previous week
 - New tags, removed tags, changed fields (Typical, Status, Area_Class, etc.)
 - Delta report shown after import, accessible from history
 - Highlight what changed since last week
 
-**M5 — Spec rule checks (deferred until data complete)**
+**M5 — Spec rule checks (deferred until data complete)** ← NEXT (waiting on HOC/BoOC data)
 - Detector type vs fire zone vs spec requirement (needs HOC data + Fire Zone field)
 - All FGS input tags have Typical populated
 - Traceable to spec clause
