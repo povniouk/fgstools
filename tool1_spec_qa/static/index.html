@@ -280,6 +280,25 @@
     .loop-tag-subtable tr:hover td { background: #2a2d2e; }
     .loop-warn { display: inline-block; background: #2e1e0a; border: 1px solid #5a3800; color: #dcdcaa; border-radius: 2px; font-size: 0.67rem; padding: 1px 6px; margin-right: 3px; white-space: nowrap; }
     .loop-warn.warn-inconsistent { background: #2a1200; border-color: #6b3800; color: #f4a460; }
+    /* Diff panel */
+    .diff-section-title { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #858585; margin: 16px 0 8px; }
+    .diff-section-title.added   { color: #4ec9b0; }
+    .diff-section-title.removed { color: #f44747; }
+    .diff-section-title.changed { color: #dcdcaa; }
+    .diff-table { width: 100%; border-collapse: collapse; font-size: 0.81rem; margin-bottom: 4px; }
+    .diff-table th { text-align: left; padding: 5px 10px; color: #555; font-weight: 600; border-bottom: 1px solid #2a2a2a; white-space: nowrap; }
+    .diff-table td { padding: 5px 10px; border-bottom: 1px solid #252525; vertical-align: top; }
+    .diff-table tr:last-child td { border-bottom: none; }
+    .diff-table tr:hover td { background: #2a2d2e; }
+    .diff-tag  { font-family: Consolas, monospace; color: #9cdcfe; white-space: nowrap; }
+    .diff-loop { font-family: Consolas, monospace; color: #858585; font-size: 0.78rem; white-space: nowrap; }
+    .diff-from { color: #f44747; text-decoration: line-through; font-size: 0.78rem; }
+    .diff-to   { color: #4ec9b0; font-size: 0.78rem; }
+    .diff-arrow { color: #555; margin: 0 4px; }
+    .diff-stat  { display: inline-block; font-size: 0.78rem; margin-right: 14px; }
+    .diff-stat.added   { color: #4ec9b0; }
+    .diff-stat.removed { color: #f44747; }
+    .diff-stat.changed { color: #dcdcaa; }
   </style>
 </head>
 <body>
@@ -562,6 +581,16 @@
         <div class="section">
           <div class="section-header"><h2>Import History</h2></div>
           <div id="spiHistory"><span style="color:#555;font-size:0.85rem;">No imports yet.</span></div>
+        </div>
+
+        <div class="section" id="spiDiffSection" style="display:none;">
+          <div class="section-header">
+            <h2 id="spiDiffTitle">Delta Report</h2>
+            <button onclick="document.getElementById('spiDiffSection').style.display='none'"
+              style="background:none;border:none;color:#858585;font-size:1.1rem;cursor:pointer;padding:0 4px;"
+              title="Close">×</button>
+          </div>
+          <div id="spiDiffContent"></div>
         </div>
       </div>
 
@@ -1861,6 +1890,17 @@
         const flagged = Object.values(fc).reduce((a,b)=>a+b,0);
         const summary = document.getElementById('spiImportSummary');
         summary.className = 'spi-import-summary visible';
+        const diff = data.diff;
+        const diffHtml = diff
+          ? `<div style="margin-top:10px;font-size:0.82rem;">
+              <span style="color:#858585;">vs ${diff.prev_week_label} — </span>
+              <span class="diff-stat added">+${diff.new_count} new</span>
+              <span class="diff-stat removed">−${diff.removed_count} removed</span>
+              <span class="diff-stat changed">~${diff.changed_count} changed</span>
+              <button class="spi-load-btn" onclick="loadSpiDiff(${data.import_id})"
+                style="color:#9b9bff;border-color:#3a3a6a;margin-left:10px;">View diff</button>
+            </div>`
+          : '';
         summary.innerHTML = `
           <div class="spi-summary-grid">
             <div class="spi-stat"><div class="spi-stat-label">Week</div><div class="spi-stat-value ok">${data.week_label}</div></div>
@@ -1870,7 +1910,8 @@
           </div>
           ${flagged > 0 ? '<div style="font-size:0.8rem;color:#858585;">' +
             Object.entries(fc).map(([k,v]) => `<span class="flag-badge flag-${k}">${_FLAG_LABELS[k]||k}: ${v}</span>`).join('') +
-            '</div>' : ''}`;
+            '</div>' : ''}
+          ${diffHtml}`;
 
         await loadSpiHistory();
       } catch(e) {
@@ -1887,12 +1928,21 @@
       }
       el.innerHTML = data.imports.map(imp => {
         const dt = imp.imported_at ? imp.imported_at.replace('T',' ').slice(0,16) + ' UTC' : '';
+        const d = imp.diff;
+        const diffStats = d
+          ? `<span class="diff-stat added">+${d.new_count}</span><span class="diff-stat removed">−${d.removed_count}</span><span class="diff-stat changed">~${d.changed_count}</span>`
+          : '<span style="color:#3c3c3c;font-size:0.75rem;">no diff</span>';
+        const diffBtn = d
+          ? `<button class="spi-load-btn" onclick="loadSpiDiff(${imp.id})" style="color:#9b9bff;border-color:#3a3a6a;" title="vs ${d.prev_week_label}">Diff</button>`
+          : '';
         return `<div class="spi-history-row">
           <span class="spi-week">${imp.week_label}</span>
           <span style="color:#cccccc;font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${imp.filename}</span>
           <span class="spi-fgs-count">${imp.fgs_count} F&amp;G tags</span>
+          <span style="min-width:120px;">${diffStats}</span>
           <span class="spi-date">${dt}</span>
           <button class="spi-load-btn" onclick="loadSpiLoops(${imp.id})">View</button>
+          ${diffBtn}
           <button class="spi-load-btn" onclick="deleteSpiImport(${imp.id})" style="color:#f44747;border-color:#5a2020;" title="Delete this import and all its tags">×</button>
         </div>`;
       }).join('');
@@ -1905,6 +1955,87 @@
       if (data.error) { alert('Delete failed: ' + data.error); return; }
       if (_spiCurrentImportId === importId) _spiCurrentImportId = null;
       await loadSpiHistory();
+    }
+
+    const _FIELD_LABELS = {
+      typical: 'Typical', status: 'Status', area_class: 'Area Class',
+      system1: 'System1', io_type1: 'IO Type1', system2: 'System2', io_type2: 'IO Type2',
+      design_by: 'Design By', loop_name: 'Loop Name', tag_serv: 'Service',
+    };
+
+    async function loadSpiDiff(importId) {
+      const res = await fetch('/api/spi/diff/' + importId);
+      const data = await res.json();
+      if (!data.diff) {
+        alert('No diff available — this may be the first import.'); return;
+      }
+      const d  = data.diff;
+      const dd = d.diff_data;
+
+      // Switch to import tab and show the diff section
+      document.querySelectorAll('#page-spi .sub-tab').forEach((t,i) => t.classList.toggle('active', i===0));
+      document.querySelectorAll("[id^='spi-tab-']").forEach(p => p.style.display = 'none');
+      document.getElementById('spi-tab-import').style.display = 'block';
+
+      document.getElementById('spiDiffTitle').textContent =
+        `Delta Report — vs ${d.prev_week_label || '(prev)'}`;
+      document.getElementById('spiDiffSection').style.display = 'block';
+      document.getElementById('spiDiffSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      const tagCols = t => `
+        <td class="diff-tag">${t.tag_number||'—'}</td>
+        <td class="diff-loop">${t.loop_name||'—'}</td>
+        <td>${t.system1||'—'}</td><td>${t.io_type1||'—'}</td>
+        <td>${t.system2||'<span style="color:#3c3c3c">—</span>'}</td><td>${t.io_type2||'<span style="color:#3c3c3c">—</span>'}</td>
+        <td style="font-family:Consolas,monospace;font-size:0.79rem;">${t.typical||'<span style="color:#555">—</span>'}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+            title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>`;
+
+      const tagHeader = `<tr>
+        <th>Tag Number</th><th>Loop</th><th>Sys1</th><th>IO1</th>
+        <th>Sys2</th><th>IO2</th><th>Typical</th><th>Service</th>
+      </tr>`;
+
+      const renderTable = (rows, cls) => rows.length === 0
+        ? `<p style="color:#555;font-size:0.82rem;margin:4px 0 12px;">None.</p>`
+        : `<div style="overflow-x:auto;margin-bottom:16px;"><table class="diff-table">
+            <thead>${tagHeader}</thead>
+            <tbody>${rows.map(t => `<tr class="${cls}">${tagCols(t)}</tr>`).join('')}</tbody>
+           </table></div>`;
+
+      const changedRows = dd.changed.map(c => {
+        const fieldList = Object.entries(c.changes).map(([f, v]) =>
+          `<span style="color:#858585;">${_FIELD_LABELS[f]||f}:</span> ` +
+          `<span class="diff-from">${v.from||'—'}</span>` +
+          `<span class="diff-arrow">→</span>` +
+          `<span class="diff-to">${v.to||'—'}</span>`
+        ).join('<span style="color:#3c3c3c;margin:0 6px;">|</span>');
+        return `<tr>
+          <td class="diff-tag">${c.tag_number}</td>
+          <td class="diff-loop">${c.loop_name||'—'}</td>
+          <td colspan="6" style="font-size:0.79rem;">${fieldList}</td>
+        </tr>`;
+      }).join('');
+
+      const changedTable = dd.changed.length === 0
+        ? `<p style="color:#555;font-size:0.82rem;margin:4px 0 12px;">None.</p>`
+        : `<div style="overflow-x:auto;margin-bottom:16px;"><table class="diff-table">
+            <thead><tr><th>Tag Number</th><th>Loop</th><th colspan="6">Changes</th></tr></thead>
+            <tbody>${changedRows}</tbody>
+           </table></div>`;
+
+      document.getElementById('spiDiffContent').innerHTML = `
+        <p style="font-size:0.82rem;color:#858585;margin:0 0 14px;">
+          <span class="diff-stat added">+${dd.new_count} new tags</span>
+          <span class="diff-stat removed">−${dd.removed_count} removed tags</span>
+          <span class="diff-stat changed">~${dd.changed_count} changed fields</span>
+        </p>
+        <div class="diff-section-title added">▸ New tags (${dd.new_count})</div>
+        ${renderTable(dd.new, 'added')}
+        <div class="diff-section-title removed">▸ Removed tags (${dd.removed_count})</div>
+        ${renderTable(dd.removed, 'removed')}
+        <div class="diff-section-title changed">▸ Changed fields (${dd.changed_count})</div>
+        ${changedTable}`;
     }
 
     async function loadSpiTags(importId) {

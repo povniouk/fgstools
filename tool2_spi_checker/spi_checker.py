@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import datetime
 import sqlite3
 import tempfile
@@ -79,6 +80,17 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_spi_tags_import  ON spi_tags(import_id);
         CREATE INDEX IF NOT EXISTS idx_spi_tags_system1 ON spi_tags(system1);
         CREATE INDEX IF NOT EXISTS idx_spi_tags_system2 ON spi_tags(system2);
+        CREATE TABLE IF NOT EXISTS spi_diffs (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            import_id      INTEGER REFERENCES spi_imports(id) ON DELETE CASCADE,
+            prev_import_id INTEGER,
+            computed_at    TEXT,
+            new_count      INTEGER DEFAULT 0,
+            removed_count  INTEGER DEFAULT 0,
+            changed_count  INTEGER DEFAULT 0,
+            diff_json      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_spi_diffs_import ON spi_diffs(import_id);
     """)
     db.commit()
     db.close()
@@ -163,6 +175,58 @@ def _duplicate_tag_numbers(db, import_id):
     return {r['tag_number'] for r in rows}
 
 
+_DIFF_FIELDS = [
+    'typical', 'status', 'area_class',
+    'system1', 'io_type1', 'system2', 'io_type2',
+    'design_by', 'loop_name', 'tag_serv',
+]
+
+# Display-relevant fields stored on new/removed tag snapshots
+_DIFF_SNAPSHOT_FIELDS = [
+    'tag_number', 'loop_name', 'system1', 'io_type1',
+    'system2', 'io_type2', 'typical', 'tag_serv', 'area_class', 'design_by', 'status',
+]
+
+
+def _compute_diff(new_tags, prev_tags):
+    """Compare two tag lists keyed on tag_number. Returns a diff dict."""
+    new_map  = {t['tag_number']: t for t in new_tags  if t.get('tag_number')}
+    prev_map = {t['tag_number']: t for t in prev_tags if t.get('tag_number')}
+
+    new_keys  = set(new_map)
+    prev_keys = set(prev_map)
+
+    added = [
+        {f: new_map[k].get(f) for f in _DIFF_SNAPSHOT_FIELDS}
+        for k in sorted(new_keys - prev_keys)
+    ]
+    removed = [
+        {f: prev_map[k].get(f) for f in _DIFF_SNAPSHOT_FIELDS}
+        for k in sorted(prev_keys - new_keys)
+    ]
+
+    changed = []
+    for k in sorted(new_keys & prev_keys):
+        n, p = new_map[k], prev_map[k]
+        field_changes = {}
+        for f in _DIFF_FIELDS:
+            nv = n.get(f) or ''
+            pv = p.get(f) or ''
+            if nv != pv:
+                field_changes[f] = {'from': p.get(f), 'to': n.get(f)}
+        if field_changes:
+            changed.append({
+                'tag_number': k,
+                'loop_name': n.get('loop_name'),
+                'changes': field_changes,
+            })
+
+    return {
+        'new': added, 'removed': removed, 'changed': changed,
+        'new_count': len(added), 'removed_count': len(removed), 'changed_count': len(changed),
+    }
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @bp.route('/api/spi/import', methods=['POST'])
@@ -209,12 +273,44 @@ def import_spi():
         for flag in _compute_flags(t):
             flag_counts[flag] = flag_counts.get(flag, 0) + 1
 
+    # Diff against the most recent previous import
+    diff_summary = None
+    prev = db.execute(
+        "SELECT id, week_label FROM spi_imports WHERE id != ? ORDER BY id DESC LIMIT 1",
+        (import_id,)
+    ).fetchone()
+    if prev:
+        prev_tags = [dict(r) for r in db.execute(
+            "SELECT * FROM spi_tags WHERE import_id=?", (prev['id'],)
+        ).fetchall()]
+        diff = _compute_diff(tags, prev_tags)
+        db.execute(
+            "INSERT INTO spi_diffs "
+            "(import_id, prev_import_id, computed_at, new_count, removed_count, changed_count, diff_json) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (import_id, prev['id'], now,
+             diff['new_count'], diff['removed_count'], diff['changed_count'],
+             json.dumps(diff))
+        )
+        db.commit()
+        diff_summary = {
+            'prev_import_id': prev['id'],
+            'prev_week_label': prev['week_label'],
+            'new_count': diff['new_count'],
+            'removed_count': diff['removed_count'],
+            'changed_count': diff['changed_count'],
+        }
+        _log(f"[SPI] Diff vs {prev['week_label']}: "
+             f"+{diff['new_count']} new, -{diff['removed_count']} removed, "
+             f"~{diff['changed_count']} changed")
+
     db.close()
     _log(f"[SPI] Done: {len(tags)} F&G tags ({flag_counts.get('via_system2',0)} via System2) "
          f"from {total_rows} total rows — flags: {flag_counts}")
     return jsonify({
         'ok': True, 'import_id': import_id, 'week_label': week_label,
         'total_rows': total_rows, 'fgs_count': len(tags), 'flag_counts': flag_counts,
+        'diff': diff_summary,
     })
 
 
@@ -222,8 +318,38 @@ def import_spi():
 def list_imports():
     db = get_db()
     rows = db.execute("SELECT * FROM spi_imports ORDER BY id DESC").fetchall()
+    diffs = {r['import_id']: dict(r) for r in db.execute(
+        "SELECT import_id, prev_import_id, new_count, removed_count, changed_count "
+        "FROM spi_diffs"
+    ).fetchall()}
+    # Fetch week labels for prev imports
+    all_imports = {r['id']: r['week_label'] for r in
+                   db.execute("SELECT id, week_label FROM spi_imports").fetchall()}
     db.close()
-    return jsonify({'imports': [dict(r) for r in rows]})
+    result = []
+    for r in rows:
+        imp = dict(r)
+        d = diffs.get(r['id'])
+        if d:
+            d['prev_week_label'] = all_imports.get(d['prev_import_id'], '?')
+        imp['diff'] = d
+        result.append(imp)
+    return jsonify({'imports': result})
+
+
+@bp.route('/api/spi/diff/<int:import_id>', methods=['GET'])
+def get_diff(import_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM spi_diffs WHERE import_id=?", (import_id,)
+    ).fetchone()
+    db.close()
+    if not row:
+        return jsonify({'diff': None, 'import_id': import_id})
+    d = dict(row)
+    d['diff_data'] = json.loads(d['diff_json'])
+    del d['diff_json']
+    return jsonify({'diff': d, 'import_id': import_id})
 
 
 @bp.route('/api/spi/imports/<int:import_id>', methods=['DELETE'])
