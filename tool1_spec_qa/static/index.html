@@ -255,6 +255,28 @@
     .spi-tag-table tr:hover td { background: #2a2d2e; }
     .spi-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
     .spi-filters label { font-size: 0.75rem; color: #858585; }
+    /* Loop Register */
+    .spi-loop-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .spi-loop-table th { text-align: left; padding: 7px 10px; color: #858585; font-weight: 600; border-bottom: 1px solid #3c3c3c; white-space: nowrap; }
+    .spi-loop-table td { padding: 7px 10px; border-bottom: 1px solid #2d2d2d; vertical-align: middle; }
+    .loop-row { cursor: pointer; }
+    .loop-row:hover td { background: #2a2d2e; }
+    .loop-row.open td { background: #222527; }
+    .loop-expand { display: inline-block; color: #858585; font-size: 0.7rem; transition: transform 0.12s; user-select: none; }
+    .loop-expand.open { transform: rotate(90deg); }
+    .loop-name { font-family: Consolas, monospace; color: #9cdcfe; white-space: nowrap; }
+    .loop-typical { font-family: Consolas, monospace; color: #ce9178; font-size: 0.82rem; }
+    .loop-typical.mixed { color: #dcdcaa; font-style: italic; }
+    .loop-tags-row { display: none; }
+    .loop-tags-row.open { display: table-row; }
+    .loop-tag-subtable { width: 100%; border-collapse: collapse; }
+    .loop-tag-subtable th { text-align: left; padding: 5px 10px 5px 28px; color: #555; font-size: 0.75rem; font-weight: 600; border-bottom: 1px solid #2a2a2a; white-space: nowrap; }
+    .loop-tag-subtable td { padding: 5px 10px; font-size: 0.79rem; border-bottom: 1px solid #252525; color: #a0a0a0; }
+    .loop-tag-subtable td:first-child { padding-left: 28px; color: #9cdcfe; font-family: Consolas, monospace; white-space: nowrap; }
+    .loop-tag-subtable tr:last-child td { border-bottom: none; }
+    .loop-tag-subtable tr:hover td { background: #2a2d2e; }
+    .loop-warn { display: inline-block; background: #2e1e0a; border: 1px solid #5a3800; color: #dcdcaa; border-radius: 2px; font-size: 0.67rem; padding: 1px 6px; margin-right: 3px; white-space: nowrap; }
+    .loop-warn.warn-inconsistent { background: #2a1200; border-color: #6b3800; color: #f4a460; }
   </style>
 </head>
 <body>
@@ -516,6 +538,7 @@
     <div class="container">
       <div class="sub-nav">
         <div class="sub-tab active" onclick="showSpiTab('import', this)">Import</div>
+        <div class="sub-tab" onclick="showSpiTab('loops', this)">Loop Register</div>
         <div class="sub-tab" onclick="showSpiTab('register', this)">Tag Register</div>
       </div>
 
@@ -535,6 +558,55 @@
         <div class="section">
           <div class="section-header"><h2>Import History</h2></div>
           <div id="spiHistory"><span style="color:#555;font-size:0.85rem;">No imports yet.</span></div>
+        </div>
+      </div>
+
+      <!-- Loop Register tab -->
+      <div id="spi-tab-loops" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <h2>F&amp;G Loop Register</h2>
+            <span id="spiLoopCount" style="font-size:0.78rem;color:#858585;"></span>
+          </div>
+          <div class="spi-filters">
+            <label>System</label>
+            <select class="filter-select" id="spiLoopFilterSystem" onchange="loadSpiLoops()">
+              <option value="">All</option>
+              <option value="FGS">FGS</option>
+              <option value="LFGS">LFGS</option>
+            </select>
+            <label>IO Type</label>
+            <select class="filter-select" id="spiLoopFilterIO" onchange="loadSpiLoops()">
+              <option value="">All</option>
+              <option value="AI">AI</option>
+              <option value="DI">DI</option>
+              <option value="DO">DO</option>
+            </select>
+            <label>Design By</label>
+            <select class="filter-select" id="spiLoopFilterDesignBy" onchange="loadSpiLoops()">
+              <option value="">All</option>
+              <option value="BoOC">BoOC</option>
+              <option value="COC">COC</option>
+              <option value="HOC">HOC</option>
+            </select>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="spiLoopFilterWarnings" onchange="loadSpiLoops()" style="accent-color:#007acc;">
+              Warnings only
+            </label>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="spi-loop-table">
+              <thead>
+                <tr>
+                  <th style="width:22px;"></th>
+                  <th>Loop Name</th><th>Typical</th><th>Tags</th><th>Warnings</th>
+                </tr>
+              </thead>
+              <tbody id="spiLoopBody">
+                <tr><td colspan="5" class="empty-row">Import an SPI file to populate the loop register.</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1697,6 +1769,7 @@
       document.querySelectorAll('#page-spi .sub-tab').forEach(t => t.classList.remove('active'));
       document.getElementById('spi-tab-' + name).style.display = 'block';
       tab.classList.add('active');
+      if (name === 'loops')    loadSpiLoops();
       if (name === 'register') loadSpiTags();
     }
 
@@ -1767,7 +1840,7 @@
           <span style="color:#cccccc;font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${imp.filename}</span>
           <span class="spi-fgs-count">${imp.fgs_count} F&amp;G tags</span>
           <span class="spi-date">${dt}</span>
-          <button class="spi-load-btn" onclick="loadSpiTags(${imp.id})">View</button>
+          <button class="spi-load-btn" onclick="loadSpiLoops(${imp.id})">View</button>
         </div>`;
       }).join('');
     }
@@ -1812,9 +1885,97 @@
       }).join('');
 
       // Switch to register tab
-      document.querySelectorAll('#page-spi .sub-tab').forEach((t,i) => t.classList.toggle('active', i===1));
-      document.getElementById('spi-tab-import').style.display = 'none';
+      document.querySelectorAll('#page-spi .sub-tab').forEach((t,i) => t.classList.toggle('active', i===2));
+      document.querySelectorAll("[id^='spi-tab-']").forEach(p => p.style.display = 'none');
       document.getElementById('spi-tab-register').style.display = 'block';
+    }
+
+    const _LOOP_WARN_LABELS = {
+      missing_typical: 'No Typical',
+      inconsistent_typical: 'Inconsistent Typical',
+      missing_area_class: 'No Area Class',
+    };
+
+    async function loadSpiLoops(importId) {
+      if (importId) _spiCurrentImportId = importId;
+      const system1   = document.getElementById('spiLoopFilterSystem').value;
+      const io_type1  = document.getElementById('spiLoopFilterIO').value;
+      const design_by = document.getElementById('spiLoopFilterDesignBy').value;
+      const warnsOnly = document.getElementById('spiLoopFilterWarnings').checked ? '1' : '';
+
+      let url = '/api/spi/loops?';
+      if (_spiCurrentImportId) url += 'import_id=' + _spiCurrentImportId + '&';
+      if (system1)   url += 'system1='   + encodeURIComponent(system1)   + '&';
+      if (io_type1)  url += 'io_type1='  + encodeURIComponent(io_type1)  + '&';
+      if (design_by) url += 'design_by=' + encodeURIComponent(design_by) + '&';
+      if (warnsOnly) url += 'warnings_only=1&';
+
+      const res = await fetch(url);
+      const data = await res.json();
+      document.getElementById('spiLoopCount').textContent =
+        data.loop_count + ' loops · ' + data.tag_count + ' tags';
+
+      const tbody = document.getElementById('spiLoopBody');
+      if (!data.loops || !data.loops.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No loops found.</td></tr>';
+      } else {
+        tbody.innerHTML = data.loops.map((loop, i) => {
+          const warnHtml = (loop.warnings || []).map(w =>
+            `<span class="loop-warn${w==='inconsistent_typical'?' warn-inconsistent':''}">${_LOOP_WARN_LABELS[w]||w}</span>`
+          ).join('');
+          const typHtml = loop.typical
+            ? `<span class="loop-typical${loop.typical==='Mixed'?' mixed':''}">${loop.typical}</span>`
+            : '<span style="color:#555">—</span>';
+          const tagRows = (loop.tags || []).map(t => {
+            const flags = (t.flags || []).map(f =>
+              `<span class="flag-badge flag-${f}">${_FLAG_LABELS[f]||f}</span>`).join('');
+            return `<tr>
+              <td>${t.tag_number||'—'}</td>
+              <td>${t.system1||'—'}</td>
+              <td>${t.system2||'<span style="color:#3c3c3c">—</span>'}</td>
+              <td>${t.io_type1||'—'}</td>
+              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
+              <td>${t.area_class||'<span style="color:#555">—</span>'}</td>
+              <td>${t.design_by||'—'}</td>
+              <td>${t.status||'—'}</td>
+              <td>${flags||'<span style="color:#3c3c3c">—</span>'}</td>
+            </tr>`;
+          }).join('');
+          return `<tr class="loop-row" id="loop-row-${i}" onclick="toggleLoop(${i})">
+              <td><span class="loop-expand" id="loop-exp-${i}">▶</span></td>
+              <td><span class="loop-name">${loop.loop_name||'(No Loop)'}</span></td>
+              <td>${typHtml}</td>
+              <td style="color:#858585;">${loop.tag_count}</td>
+              <td>${warnHtml||'<span style="color:#3c3c3c">—</span>'}</td>
+            </tr>
+            <tr class="loop-tags-row" id="loop-tags-${i}">
+              <td colspan="5" style="padding:0;background:#1c1e1f;">
+                <table class="loop-tag-subtable">
+                  <thead><tr>
+                    <th>Tag Number</th><th>Sys1</th><th>Sys2</th><th>IO</th>
+                    <th>Service</th><th>Area Class</th><th>Design By</th><th>Status</th><th>Flags</th>
+                  </tr></thead>
+                  <tbody>${tagRows}</tbody>
+                </table>
+              </td>
+            </tr>`;
+        }).join('');
+      }
+
+      // Switch to loop register tab
+      document.querySelectorAll('#page-spi .sub-tab').forEach((t,i) => t.classList.toggle('active', i===1));
+      document.querySelectorAll("[id^='spi-tab-']").forEach(p => p.style.display = 'none');
+      document.getElementById('spi-tab-loops').style.display = 'block';
+    }
+
+    function toggleLoop(idx) {
+      const tagsRow = document.getElementById('loop-tags-' + idx);
+      const expIcon = document.getElementById('loop-exp-'  + idx);
+      const loopRow = document.getElementById('loop-row-'  + idx);
+      const isOpen  = tagsRow.classList.contains('open');
+      tagsRow.classList.toggle('open', !isOpen);
+      expIcon.classList.toggle('open', !isOpen);
+      loopRow.classList.toggle('open', !isOpen);
     }
 
     // --- Admin actions ---

@@ -3,6 +3,7 @@ import re
 import datetime
 import sqlite3
 import tempfile
+from collections import defaultdict
 import openpyxl
 from flask import Blueprint, request, jsonify
 
@@ -251,3 +252,81 @@ def get_tags():
         tags = [t for t in tags if t['flags']]
 
     return jsonify({'tags': tags, 'import_id': int(import_id), 'count': len(tags)})
+
+
+@bp.route('/api/spi/loops', methods=['GET'])
+def get_loops():
+    import_id     = request.args.get('import_id')
+    system1       = request.args.get('system1', '')
+    io_type1      = request.args.get('io_type1', '')
+    design_by     = request.args.get('design_by', '')
+    warnings_only = request.args.get('warnings_only', '')
+
+    db = get_db()
+    if not import_id:
+        latest = db.execute("SELECT id FROM spi_imports ORDER BY id DESC LIMIT 1").fetchone()
+        if not latest:
+            db.close()
+            return jsonify({'loops': [], 'import_id': None, 'loop_count': 0, 'tag_count': 0})
+        import_id = latest['id']
+
+    q = "SELECT * FROM spi_tags WHERE import_id = ?"
+    params = [import_id]
+    if system1:
+        q += " AND (system1 = ? OR system2 = ?)"
+        params.extend([system1, system1])
+    if io_type1:
+        q += " AND io_type1 = ?"; params.append(io_type1)
+    if design_by:
+        q += " AND design_by = ?"; params.append(design_by)
+    q += " ORDER BY tag_number"
+
+    tags = [dict(r) for r in db.execute(q, params).fetchall()]
+    db.close()
+
+    for t in tags:
+        t['flags'] = _compute_flags(t)
+
+    # Group by loop_name; null/blank → '' key, sorted to end
+    loops_map = defaultdict(list)
+    for t in tags:
+        loops_map[t.get('loop_name') or ''].append(t)
+
+    loops = []
+    for loop_name in sorted(loops_map.keys(), key=lambda k: ('\xff' if not k else k)):
+        loop_tags = loops_map[loop_name]
+
+        typicals = [t['typical'] for t in loop_tags if t.get('typical')]
+        unique_typ = list(set(typicals))
+        if not unique_typ:
+            typical = None
+        elif len(unique_typ) == 1:
+            typical = unique_typ[0]
+        else:
+            typical = 'Mixed'
+
+        warnings = []
+        if any(not t.get('typical') for t in loop_tags):
+            warnings.append('missing_typical')
+        if len(unique_typ) > 1:
+            warnings.append('inconsistent_typical')
+        if any(not t.get('area_class') for t in loop_tags):
+            warnings.append('missing_area_class')
+
+        loops.append({
+            'loop_name': loop_name or None,
+            'typical': typical,
+            'tag_count': len(loop_tags),
+            'warnings': warnings,
+            'tags': loop_tags,
+        })
+
+    if warnings_only:
+        loops = [l for l in loops if l['warnings']]
+
+    return jsonify({
+        'loops': loops,
+        'import_id': int(import_id),
+        'loop_count': len(loops),
+        'tag_count': sum(l['tag_count'] for l in loops),
+    })
