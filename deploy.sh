@@ -14,8 +14,9 @@ scp "$REPO/tool1_spec_qa/app.py" \
     "$REPO/tool1_spec_qa/retriever.py" \
     "$LXC:$DEST/"
 
+ssh "$LXC" "mkdir -p $DEST/static"
 scp "$REPO/tool1_spec_qa/static/index.html" \
-    "$LXC:$DEST/static/"
+    "$LXC:$DEST/static/index.html"
 
 echo "[deploy] Copying tool2_spi_checker..."
 ssh "$LXC" "mkdir -p $DEST/tool2_spi_checker"
