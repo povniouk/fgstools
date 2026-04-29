@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deploy all tool packages to fgstools LXC and restart the service.
 # Run from the CWLNG repo root: bash deploy.sh
-# Requires SSH access to 192.168.8.117 (uses PTY for sudo restart).
+# Restart uses SIGKILL so systemd auto-restarts (no PTY/sudo needed).
 
 set -e
 LXC="povniouk@192.168.8.117"
@@ -31,11 +31,11 @@ scp "$REPO/tool5_email_tracker/__init__.py" \
 echo "[deploy] Cleaning up legacy files..."
 ssh "$LXC" "rm -f $DEST/email_tracker.py $DEST/index.html"
 
-echo "[deploy] Restarting fgstools service..."
-ssh -t "$LXC" "sudo /usr/bin/systemctl restart fgstools"
+echo "[deploy] Restarting fgstools (SIGKILL → systemd auto-restart)..."
+ssh "$LXC" "kill -9 \$(pgrep -f 'venv/bin/python app.py') 2>/dev/null || true"
+sleep 4
 
 echo "[deploy] Checking status..."
-ssh "$LXC" "sudo /usr/bin/systemctl status fgstools --no-pager | head -5" 2>/dev/null || \
-ssh -t "$LXC" "sudo /usr/bin/systemctl status fgstools --no-pager | head -5"
+ssh "$LXC" "systemctl is-active fgstools && pgrep -a -f 'python app.py'"
 
 echo "[deploy] Done."
