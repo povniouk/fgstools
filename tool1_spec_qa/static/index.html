@@ -2009,8 +2009,9 @@
             return `<tr>
               <td>${t.tag_number||'—'}</td>
               <td>${t.system1||'—'}</td>
-              <td>${t.system2||'<span style="color:#3c3c3c">—</span>'}</td>
               <td>${t.io_type1||'—'}</td>
+              <td>${t.system2||'<span style="color:#3c3c3c">—</span>'}</td>
+              <td>${t.io_type2||'<span style="color:#3c3c3c">—</span>'}</td>
               <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
               <td>${t.area_class||'<span style="color:#555">—</span>'}</td>
               <td>${t.design_by||'—'}</td>
@@ -2029,7 +2030,7 @@
               <td colspan="5" style="padding:0;background:#1c1e1f;">
                 <table class="loop-tag-subtable">
                   <thead><tr>
-                    <th>Tag Number</th><th>Sys1</th><th>Sys2</th><th>IO</th>
+                    <th>Tag Number</th><th>Sys1</th><th>IO1</th><th>Sys2</th><th>IO2</th>
                     <th>Service</th><th>Area Class</th><th>Design By</th><th>Status</th><th>Flags</th>
                   </tr></thead>
                   <tbody>${tagRows}</tbody>
