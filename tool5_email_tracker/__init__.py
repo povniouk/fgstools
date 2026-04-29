@@ -849,7 +849,7 @@ def transcribe_meeting():
             return jsonify({"error": "faster-whisper is not installed on this server"}), 500
 
         model = WhisperModel("base", device="cpu", compute_type="int8")
-        segments, info = model.transcribe(tmp_path, beam_size=5)
+        segments, info = model.transcribe(tmp_path, beam_size=5, language="en")
         parts = [seg.text.strip() for seg in segments]
         transcript = " ".join(parts)
         _log(f"[meetings] Done: {len(transcript)} chars, language={info.language}")
@@ -863,8 +863,18 @@ def transcribe_meeting():
             except Exception:
                 pass
 
+    # Parse Teams filename: "Teams meeting-20260429_133404UTC-Meeting Recording.mp4"
+    parsed_title = ""
+    parsed_date = ""
+    m = re.match(r'Teams\s+meeting-(\d{8})_\d{6}\w*-(.+)\.\w+', original_name, re.IGNORECASE)
+    if m:
+        d = m.group(1)
+        parsed_date = f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+        parsed_title = m.group(2).strip()
+
     return jsonify({"ok": True, "transcript": transcript, "filename": original_name,
-                    "language": info.language})
+                    "language": info.language, "parsed_title": parsed_title,
+                    "parsed_date": parsed_date})
 
 
 @bp.route("/api/meetings/extract", methods=["POST"])

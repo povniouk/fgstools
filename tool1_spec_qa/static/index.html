@@ -1912,6 +1912,10 @@
           return;
         }
         document.getElementById("meetingTranscript").value = data.transcript;
+        if (data.parsed_title && !document.getElementById("meetingTitle").value.trim())
+          document.getElementById("meetingTitle").value = data.parsed_title;
+        if (data.parsed_date && !document.getElementById("meetingDate").value)
+          document.getElementById("meetingDate").value = data.parsed_date;
         document.getElementById("meetingExtractBtn").disabled = false;
         setStatus("meetingUploadStatus", "ok",
           `Transcribed ${file.name} — ${data.transcript.length} chars, language: ${data.language||'?'}`);
