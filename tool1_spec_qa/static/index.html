@@ -1893,8 +1893,18 @@
           <span class="spi-fgs-count">${imp.fgs_count} F&amp;G tags</span>
           <span class="spi-date">${dt}</span>
           <button class="spi-load-btn" onclick="loadSpiLoops(${imp.id})">View</button>
+          <button class="spi-load-btn" onclick="deleteSpiImport(${imp.id})" style="color:#f44747;border-color:#5a2020;" title="Delete this import and all its tags">×</button>
         </div>`;
       }).join('');
+    }
+
+    async function deleteSpiImport(importId) {
+      if (!confirm('Delete this import and all its tags?')) return;
+      const res = await fetch('/api/spi/imports/' + importId, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.error) { alert('Delete failed: ' + data.error); return; }
+      if (_spiCurrentImportId === importId) _spiCurrentImportId = null;
+      await loadSpiHistory();
     }
 
     async function loadSpiTags(importId) {

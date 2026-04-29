@@ -36,6 +36,7 @@ _COL_MAP = {
 def get_db():
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys = ON")
     return db
 
 
@@ -223,6 +224,20 @@ def list_imports():
     rows = db.execute("SELECT * FROM spi_imports ORDER BY id DESC").fetchall()
     db.close()
     return jsonify({'imports': [dict(r) for r in rows]})
+
+
+@bp.route('/api/spi/imports/<int:import_id>', methods=['DELETE'])
+def delete_import(import_id):
+    db = get_db()
+    row = db.execute("SELECT id FROM spi_imports WHERE id=?", (import_id,)).fetchone()
+    if not row:
+        db.close()
+        return jsonify({'error': 'Import not found'}), 404
+    db.execute("DELETE FROM spi_imports WHERE id=?", (import_id,))
+    db.commit()
+    db.close()
+    _log(f"[SPI] Deleted import {import_id}")
+    return jsonify({'ok': True})
 
 
 @bp.route('/api/spi/tags', methods=['GET'])
