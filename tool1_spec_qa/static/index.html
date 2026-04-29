@@ -82,7 +82,7 @@
     #dropZone { border: 1px dashed #3c3c3c; border-radius: 4px; padding: 36px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
     #dropZone:hover { border-color: #007acc; }
 
-    /* Email Tracker */
+    /* Project Tracker */
     #emailDropZone { border: 1px dashed #3c3c3c; border-radius: 4px; padding: 36px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
     #emailDropZone:hover { border-color: #007acc; }
     #meetingDropZone { border: 1px dashed #3c3c3c; border-radius: 4px; padding: 36px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
@@ -315,7 +315,7 @@
     <nav class="dashboard-nav">
       <div class="dash-tab" onclick="showDash('overview')">Overview</div>
       <div class="dash-tab active" onclick="showDash('specqa')">Spec Q&amp;A</div>
-      <div class="dash-tab" onclick="showDash('email')">Email Tracker</div>
+      <div class="dash-tab" onclick="showDash('email')">Project Tracker</div>
       <div class="dash-tab" onclick="showDash('spi')">SPI Checker</div>
       <div class="dash-tab" onclick="showDash('cande')">C&amp;E Checker <span class="badge">soon</span></div>
       <div class="dash-tab" onclick="showDash('admin')">Admin</div>
@@ -456,7 +456,7 @@
     </div>
   </div>
 
-  <!-- ── Email Tracker ── -->
+  <!-- ── Project Tracker ── -->
   <div id="page-email" class="page">
     <div class="container">
       <div class="sub-nav">
@@ -1295,7 +1295,7 @@
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askQuestion(); }
     });
 
-    // --- Email Tracker ---
+    // --- Project Tracker ---
     let _emailId = null;
 
     function showEmailTab(name, tab) {
