@@ -90,7 +90,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 | Email Tracker | Next to build | Deliverable tracking from forwarded emails |
 | SPI Checker | Planned (Tool 2) | Waiting for complete SPI data |
 | C&E Checker | Planned (Tool 3) | Waiting for first C&E draft |
-| Doc Register | In progress (Tool 8) | Weekly GAIA xml import + watchlist |
+| Doc Register | Complete M1–M5 (Tool 8) | Weekly GAIA xml import + watchlist + diff + files |
 
 **Operational requirements (non-negotiable):**
 - App must run as a **systemd service** — starts on boot, restarts on crash, no terminal needed for day-to-day operation
@@ -308,54 +308,73 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 ---
 
-### Tool 8 — Document Submittal Register — IN PROGRESS
+### Tool 8 — Document Submittal Register — COMPLETE (M1–M5)
 
 **Purpose:** Replace manual GAIA monitoring. Weekly xml dump → full register stored in SQLite → diff vs prior week → notify on changes to documents on a user-managed watchlist. Full register (~3,986 docs) is browseable for information; the watchlist surfaces only docs the user actively works on.
 
-**Ingestion:** User scrapes GAIA manually (no API; SSO-only system; admins on holiday — investigation continues), exports Advitium xml, drag-drops into browser. The companion `.xlsm` is just an Excel XML-Map viewer with no business logic — ignore it and parse the xml directly.
+**Ingestion:** User scrapes GAIA manually (no API; SSO-only system), exports Advitium xml, drag-drops into browser. The companion `.xlsm` is just an Excel XML-Map viewer — ignore it and **parse the xml directly** via `ET.iterparse` with `el.clear()` to keep memory flat (~0.4s for 3,986 docs).
 
-**Stack:** `tool8_doc_register/` Flask Blueprint, SQLite (`gaia_imports`, `gaia_docs`, `gaia_doc_history`, `gaia_watchlist`), `xml.etree.ElementTree` for streaming parse (~0.4s for 3,986 docs).
+**Stack:** `tool8_doc_register/` Flask Blueprint, SQLite (`gaia_imports`, `gaia_docs`, `gaia_doc_history`, `gaia_watchlist`, `gaia_doc_files`), `xml.etree.ElementTree` streaming parse.
 
 **Match keys:** REF (internal Advitium key, e.g. `078051C-A00-PDS-1547-0001`) and CLIENT_REF (e.g. `CWLNG-TEN-A00-PRO-PDS-00001`). Both indexed; watchlist accepts either.
 
 **F&G subset:** `DISC = "HSE Design"` (265 docs in W2026-05-06 export — much smaller than the full 3,986).
 
+**Diff fields tracked:** `rev`, `rev_purp`, `rev_date`, `state`, `trans_out_date`, `title`, `client_ref` — stored in `gaia_doc_history` as an audit trail.
+
+**File storage:** Uploaded docs stored at `~/spec-qa/gaia_files/<safe_ref>/filename`; spec PDFs in `~/spec-qa/specs/` are linked (not copied) via `POST /api/gaia/files/link-specs` which regex-matches filenames against REF/CLIENT_REF patterns.
+
 ---
 
 #### Tool 8 — Milestone Plan
 
-**M1 — XML import + storage** ← IN PROGRESS
+**M1 — XML import + storage** ✅ DONE
 - Drag-drop `.xml` upload on Doc Register tab
-- Streaming parse with ElementTree; persist all 235 attributes per doc as JSON, plus 15 indexed core columns (REF, CLIENT_REF, TITLE, REV, REV_PURP, REV_DATE, STATE, DISC, OC, etc.)
+- `ET.iterparse` streaming parse; persist all 235 attributes per doc as JSON blob, plus 15 indexed core columns (REF, CLIENT_REF, TITLE, REV, REV_PURP, REV_DATE, STATE, DISC, OC, UNIT, DOC_TYPE, DOC_CODE, TRANS_OUT_DATE, last_date)
 - SQLite tables: `gaia_imports`, `gaia_docs`
 - Import summary: total docs, breakdown by DISC / OC / STATE
-- Import history list
+- Import history list with "View" link per entry
 
-**M2 — Register view**
-- Filterable table: DISC, OC, STATE, REV_PURP, DOC_TYPE
-- Search by REF / CLIENT_REF / TITLE
-- Default filter: HSE Design (your F&G scope) — toggle to show all
-- Click row → detail panel with sensible field subset; "Show all 235 fields" expander
+**M2 — Register view** ✅ DONE
+- Filterable table: DISC, OC, STATE, REV_PURP, DOC_TYPE (filter dropdowns populated from live data)
+- Search by REF / CLIENT_REF / TITLE (debounced)
+- Default filter: HSE Design (F&G scope) — toggle to show all 3,986 docs (limit 10,000)
+- Sortable columns (client-side sort with `_gaiaRegSort` state)
+- Count shows "X of Y (filtered)" when limit hit
+- Click row → slide-in `#gaiaPanel` detail panel with: core fields, "Show all 235 fields" expander (2-column grid), change history timeline, associated files, "Add to Watchlist" button
 
-**M3 — Week-over-week diff**
-- On import, compare against previous import (mirrors Tool 2 M4 pattern)
-- New docs, removed docs, REV/STATE/REV_PURP/TRANS_OUT_DATE changes
-- Delta report shown after import; accessible from history
-- `gaia_doc_history` table records every change (audit trail)
+**M3 — Week-over-week diff** ✅ DONE
+- On import, bulk-compare against previous import via Python dict set operations (fast, avoids N+1)
+- New docs, removed docs, REV/STATE/REV_PURP/TRANS_OUT_DATE/TITLE/CLIENT_REF changes
+- Delta counts returned in import response; diff report at `GET /api/gaia/imports/<id>/diff`
+- `gaia_doc_history` table records every change (audit trail shown in detail panel timeline)
 
-**M4 — Watchlist**
-- New tab/sub-tab "Watchlist"; new table `gaia_watchlist (ref, client_ref, title, priority, notes, added_via, added_date)`
+**M4 — Watchlist** ✅ DONE
+- Sub-tab "Watchlist"; table `gaia_watchlist`
 - Three population paths:
-  1. **Bulk import** — paste list of REFs/CLIENT_REFs, or upload .csv/.xlsx
-  2. **Manual add/edit/remove** — form
-  3. **Auto-seed** from `~/spec-qa/specs/` filenames (one-time + re-run button)
-- Watchlist view: REF | CLIENT_REF | TITLE | Current REV | STATE | Last release | Δ since last viewed
-- "Mark seen" / "Acknowledge" per row
+  1. **Bulk import** — paste list of REFs/CLIENT_REFs (one per line)
+  2. **Manual add** — inline form with REF, priority, notes
+  3. **Auto-seed** from `~/spec-qa/specs/` filenames — two regex patterns: `CWLNG-TEN-` CLIENT_REF pattern + `\d{6}[A-Z]-\d{3}-[A-Z]+-\d{4}-\d{4}` internal REF pattern
+- Watchlist view: REF | CLIENT_REF (from live import) | TITLE (from live import) | Current REV | STATE | Δ changes since acknowledged
+- "Acknowledge" per row (clears delta badge); "Acknowledge All" bulk action
+- Export to CSV
+- Click row → `openGaiaDoc()` with `alreadyWatched=true` (hides "Add to Watchlist" footer)
+- Edit watchlist item (priority, notes) via panel; remove from watchlist
 
-**M5 — Notification feed**
-- Overview widget: "N watchlist documents updated this week"
-- Watchlist row badges: 🆕 NEW REV / STATE CHANGED / RELEASED
-- In-app only; email/browser push deferred
+**M5 — Notification feed** ✅ DONE
+- Overview tab KPI card: "Watchlist Updates" count (docs with unacknowledged delta)
+- Watchlist Alerts section on Overview listing each changed doc with TITLE and delta fields
+- Watchlist row badges: `stateChip()` colour-coded by STATE value
+- Delta column shows changed fields since last acknowledgement
+- `renderOverviewAlerts()` populates from `/api/gaia/watchlist` — live data, not cached
+
+**M5+ — File management** ✅ DONE (bonus, built alongside M5)
+- Upload files per document (drag & drop or picker in detail panel): PDF, Word, any format
+- Files stored at `~/spec-qa/gaia_files/<safe_ref>/`; served via Flask `send_file()`
+- `gaia_doc_files` table: `id, ref, client_ref, filename, original_name, file_path, uploaded_at`
+- Delete individual files from panel
+- `POST /api/gaia/files/link-specs` — one-click link all spec PDFs from `~/spec-qa/specs/` to matching GAIA docs (no copy — records path only); shows count of linked files
+- Files appear in watchlist rows as chip links
 
 **M6 — Tool 4 trigger hook (structural)**
 - When a watchlisted spec gets a new REV, log a "ready for revision delta" event
@@ -407,8 +426,9 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Calls Ollama on `gemma4` at `http://192.168.8.200:11434`
 - App folder: `~/spec-qa/`
 - Spec PDFs stored in `~/spec-qa/specs/`
-- SQLite database: `~/spec-qa/cwlng.db` (emails, action_items, contacts, attachments, email_chunks)
-- File attachments stored in `~/spec-qa/attachments/<item_id>/`
+- SQLite database: `~/spec-qa/cwlng.db` (emails, action_items, contacts, attachments, email_chunks, spi_imports, spi_tags, gaia_imports, gaia_docs, gaia_doc_history, gaia_watchlist, gaia_doc_files)
+- Email attachments stored in `~/spec-qa/attachments/<item_id>/`
+- GAIA document files stored in `~/spec-qa/gaia_files/<safe_ref>/`
 - RAM: 2048MB (bumped from 1024MB to support sentence-transformers install)
 - **App must run as systemd service** — not manually from terminal
 
@@ -460,4 +480,4 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
 - [ ] Tool 4 (Revision Delta Tracker) — not started
-- [ ] Tool 8 (Document Submittal Register) — M1 in progress (xml import + storage); xlsm intentionally ignored
+- [x] Tool 8 M1–M5 (Document Submittal Register) — xml import, register view, week-over-week diff, watchlist (auto-seed from specs/), notification feed on Overview, file upload/link per document; `gaia_doc_files` table; `~/spec-qa/gaia_files/` storage
