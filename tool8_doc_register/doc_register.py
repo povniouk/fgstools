@@ -43,6 +43,122 @@ def get_db():
 _DIFF_FIELDS = ['rev', 'rev_purp', 'rev_date', 'state', 'trans_out_date', 'title', 'client_ref']
 
 
+def _run_migration(db, key, fn):
+    db.execute("CREATE TABLE IF NOT EXISTS _migrations (key TEXT PRIMARY KEY)")
+    db.commit()
+    if not db.execute("SELECT 1 FROM _migrations WHERE key=?", (key,)).fetchone():
+        fn(db)
+        db.execute("INSERT OR IGNORE INTO _migrations (key) VALUES (?)", (key,))
+        db.commit()
+
+
+def _mig_gaia_unique_week(db):
+    """Deduplicate gaia_imports by week_label (keep latest), then add UNIQUE constraint."""
+    db.execute("PRAGMA foreign_keys = OFF")
+    dupes = db.execute("""
+        SELECT id FROM gaia_imports WHERE id NOT IN (
+            SELECT MAX(id) FROM gaia_imports GROUP BY COALESCE(week_label, '')
+        )
+    """).fetchall()
+    if dupes:
+        ids = [r[0] for r in dupes]
+        ph = ','.join('?' * len(ids))
+        db.execute(f"DELETE FROM gaia_doc_history WHERE import_id IN ({ph})", ids)
+        db.execute(f"DELETE FROM gaia_docs        WHERE import_id IN ({ph})", ids)
+        db.execute(f"DELETE FROM gaia_imports      WHERE id IN ({ph})", ids)
+        _log(f"[GAIA migration] Removed {len(ids)} duplicate import(s)")
+    db.execute("""
+        CREATE TABLE gaia_imports_new (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename    TEXT,
+            week_label  TEXT UNIQUE,
+            imported_at TEXT,
+            total_docs  INTEGER
+        )
+    """)
+    db.execute("INSERT INTO gaia_imports_new SELECT * FROM gaia_imports")
+    db.execute("DROP TABLE gaia_imports")
+    db.execute("ALTER TABLE gaia_imports_new RENAME TO gaia_imports")
+    db.execute("PRAGMA foreign_keys = ON")
+
+
+def _mig_gaia_unique_docs(db):
+    """Deduplicate gaia_docs within each import, then add UNIQUE(import_id, ref)."""
+    db.execute("PRAGMA foreign_keys = OFF")
+    dupes = db.execute("""
+        SELECT id FROM gaia_docs WHERE ref IS NOT NULL AND id NOT IN (
+            SELECT MIN(id) FROM gaia_docs
+            WHERE ref IS NOT NULL
+            GROUP BY import_id, ref
+        )
+    """).fetchall()
+    if dupes:
+        ids = [r[0] for r in dupes]
+        ph = ','.join('?' * len(ids))
+        db.execute(f"DELETE FROM gaia_docs WHERE id IN ({ph})", ids)
+        _log(f"[GAIA migration] Removed {len(ids)} duplicate doc(s) within imports")
+    db.execute("""
+        CREATE TABLE gaia_docs_new (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            import_id      INTEGER REFERENCES gaia_imports(id) ON DELETE CASCADE,
+            ref            TEXT,
+            client_ref     TEXT,
+            title          TEXT,
+            rev            TEXT,
+            rev_purp       TEXT,
+            rev_date       TEXT,
+            state          TEXT,
+            disc           TEXT,
+            project_disc   TEXT,
+            oc             TEXT,
+            unit           TEXT,
+            doc_type       TEXT,
+            doc_code       TEXT,
+            trans_out_date TEXT,
+            last_date      TEXT,
+            data_json      TEXT,
+            UNIQUE(import_id, ref) ON CONFLICT IGNORE
+        )
+    """)
+    db.execute("INSERT INTO gaia_docs_new SELECT * FROM gaia_docs")
+    db.execute("DROP TABLE gaia_docs")
+    db.execute("ALTER TABLE gaia_docs_new RENAME TO gaia_docs")
+    db.execute("PRAGMA foreign_keys = ON")
+
+
+def _mig_gaia_files_dedup(db):
+    """Deduplicate gaia_doc_files, then add UNIQUE(ref, original_name, source)."""
+    db.execute("PRAGMA foreign_keys = OFF")
+    dupes = db.execute("""
+        SELECT id FROM gaia_doc_files WHERE id NOT IN (
+            SELECT MIN(id) FROM gaia_doc_files
+            GROUP BY ref, COALESCE(original_name, filename), COALESCE(source, 'upload')
+        )
+    """).fetchall()
+    if dupes:
+        ids = [r[0] for r in dupes]
+        ph = ','.join('?' * len(ids))
+        db.execute(f"DELETE FROM gaia_doc_files WHERE id IN ({ph})", ids)
+        _log(f"[GAIA migration] Removed {len(ids)} duplicate file record(s)")
+    db.execute("""
+        CREATE TABLE gaia_doc_files_new (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref           TEXT NOT NULL,
+            filename      TEXT NOT NULL,
+            original_name TEXT,
+            file_path     TEXT NOT NULL,
+            file_size     INTEGER,
+            uploaded_at   TEXT,
+            source        TEXT DEFAULT 'upload',
+            UNIQUE(ref, original_name, source) ON CONFLICT IGNORE
+        )
+    """)
+    db.execute("INSERT INTO gaia_doc_files_new SELECT * FROM gaia_doc_files")
+    db.execute("DROP TABLE gaia_doc_files")
+    db.execute("ALTER TABLE gaia_doc_files_new RENAME TO gaia_doc_files")
+    db.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db():
     db = get_db()
     db.executescript("""
@@ -95,14 +211,6 @@ def init_db():
             last_seen_state  TEXT,
             acknowledged_at  TEXT
         );
-        CREATE INDEX IF NOT EXISTS idx_gaia_docs_import     ON gaia_docs(import_id);
-        CREATE INDEX IF NOT EXISTS idx_gaia_docs_ref        ON gaia_docs(ref);
-        CREATE INDEX IF NOT EXISTS idx_gaia_docs_client_ref ON gaia_docs(client_ref);
-        CREATE INDEX IF NOT EXISTS idx_gaia_docs_disc       ON gaia_docs(disc);
-        CREATE INDEX IF NOT EXISTS idx_gaia_docs_state      ON gaia_docs(state);
-        CREATE INDEX IF NOT EXISTS idx_gaia_docs_oc         ON gaia_docs(oc);
-        CREATE INDEX IF NOT EXISTS idx_gaia_hist_import     ON gaia_doc_history(import_id);
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_gaia_wl_ref   ON gaia_watchlist(ref) WHERE ref IS NOT NULL;
         CREATE TABLE IF NOT EXISTS gaia_doc_files (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             ref           TEXT NOT NULL,
@@ -113,7 +221,21 @@ def init_db():
             uploaded_at   TEXT,
             source        TEXT DEFAULT 'upload'
         );
-        CREATE INDEX IF NOT EXISTS idx_gaia_files_ref ON gaia_doc_files(ref);
+    """)
+    _run_migration(db, 'gaia_unique_week_label',   _mig_gaia_unique_week)
+    _run_migration(db, 'gaia_unique_docs_in_import', _mig_gaia_unique_docs)
+    _run_migration(db, 'gaia_files_dedup',           _mig_gaia_files_dedup)
+    # Indexes last — recreated after any table migrations above
+    db.executescript("""
+        CREATE INDEX        IF NOT EXISTS idx_gaia_docs_import     ON gaia_docs(import_id);
+        CREATE INDEX        IF NOT EXISTS idx_gaia_docs_ref        ON gaia_docs(ref);
+        CREATE INDEX        IF NOT EXISTS idx_gaia_docs_client_ref ON gaia_docs(client_ref);
+        CREATE INDEX        IF NOT EXISTS idx_gaia_docs_disc       ON gaia_docs(disc);
+        CREATE INDEX        IF NOT EXISTS idx_gaia_docs_state      ON gaia_docs(state);
+        CREATE INDEX        IF NOT EXISTS idx_gaia_docs_oc         ON gaia_docs(oc);
+        CREATE INDEX        IF NOT EXISTS idx_gaia_hist_import     ON gaia_doc_history(import_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_gaia_wl_ref          ON gaia_watchlist(ref) WHERE ref IS NOT NULL;
+        CREATE INDEX        IF NOT EXISTS idx_gaia_files_ref       ON gaia_doc_files(ref);
     """)
     db.commit()
     db.close()
@@ -191,6 +313,21 @@ def import_gaia():
         tmp_path = tmp.name
 
     week_label = _extract_week(f.filename)
+
+    # Reject duplicate week — same date already imported
+    db = get_db()
+    existing = db.execute(
+        "SELECT id, filename, imported_at FROM gaia_imports WHERE week_label=?", (week_label,)
+    ).fetchone()
+    db.close()
+    if existing:
+        return jsonify({
+            'error': f'Already imported: {week_label} (file: {existing["filename"]}, '
+                     f'imported {existing["imported_at"][:10]}). '
+                     f'Delete the existing import first if you want to replace it.',
+            'existing_import_id': existing['id'],
+        }), 409
+
     _log(f"[GAIA] Importing {f.filename} ({week_label})...")
 
     try:
@@ -231,7 +368,7 @@ def import_gaia():
     cols = ['import_id'] + [c for c, _ in _INDEXED] + ['data_json']
     placeholders = ', '.join(':' + c for c in cols)
     db.executemany(
-        f"INSERT INTO gaia_docs ({', '.join(cols)}) VALUES ({placeholders})",
+        f"INSERT OR IGNORE INTO gaia_docs ({', '.join(cols)}) VALUES ({placeholders})",
         rows
     )
 

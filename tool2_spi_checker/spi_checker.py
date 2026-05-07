@@ -54,6 +54,116 @@ def get_db():
     return db
 
 
+def _run_migration(db, key, fn):
+    db.execute("CREATE TABLE IF NOT EXISTS _migrations (key TEXT PRIMARY KEY)")
+    db.commit()
+    if not db.execute("SELECT 1 FROM _migrations WHERE key=?", (key,)).fetchone():
+        fn(db)
+        db.execute("INSERT OR IGNORE INTO _migrations (key) VALUES (?)", (key,))
+        db.commit()
+
+
+def _mig_spi_unique_week(db):
+    """Deduplicate spi_imports by week_label (keep latest), then add UNIQUE constraint."""
+    db.execute("PRAGMA foreign_keys = OFF")
+    dupes = db.execute("""
+        SELECT id FROM spi_imports WHERE id NOT IN (
+            SELECT MAX(id) FROM spi_imports GROUP BY COALESCE(week_label, '')
+        )
+    """).fetchall()
+    if dupes:
+        ids = [r[0] for r in dupes]
+        ph = ','.join('?' * len(ids))
+        db.execute(f"DELETE FROM spi_diffs WHERE import_id IN ({ph})", ids)
+        db.execute(f"DELETE FROM spi_tags  WHERE import_id IN ({ph})", ids)
+        db.execute(f"DELETE FROM spi_imports WHERE id IN ({ph})", ids)
+        _log(f"[SPI migration] Removed {len(ids)} duplicate import(s)")
+    db.execute("""
+        CREATE TABLE spi_imports_new (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename    TEXT,
+            week_label  TEXT UNIQUE,
+            imported_at TEXT,
+            total_rows  INTEGER,
+            fgs_count   INTEGER
+        )
+    """)
+    db.execute("INSERT INTO spi_imports_new SELECT * FROM spi_imports")
+    db.execute("DROP TABLE spi_imports")
+    db.execute("ALTER TABLE spi_imports_new RENAME TO spi_imports")
+    db.execute("PRAGMA foreign_keys = ON")
+
+
+def _mig_spi_unique_tags(db):
+    """Deduplicate spi_tags within each import, then add UNIQUE(import_id, tag_number)."""
+    db.execute("PRAGMA foreign_keys = OFF")
+    dupes = db.execute("""
+        SELECT id FROM spi_tags WHERE tag_number IS NOT NULL AND id NOT IN (
+            SELECT MIN(id) FROM spi_tags
+            WHERE tag_number IS NOT NULL
+            GROUP BY import_id, tag_number
+        )
+    """).fetchall()
+    if dupes:
+        ids = [r[0] for r in dupes]
+        ph = ','.join('?' * len(ids))
+        db.execute(f"DELETE FROM spi_tags WHERE id IN ({ph})", ids)
+        _log(f"[SPI migration] Removed {len(ids)} duplicate tag(s) within imports")
+    db.execute("""
+        CREATE TABLE spi_tags_new (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            import_id       INTEGER REFERENCES spi_imports(id) ON DELETE CASCADE,
+            tag_number      TEXT,
+            tag_type        TEXT,
+            system1         TEXT,
+            io_type1        TEXT,
+            typical         TEXT,
+            tag_serv        TEXT,
+            area_class      TEXT,
+            unit_name       TEXT,
+            design_by       TEXT,
+            status          TEXT,
+            loop_name       TEXT,
+            plant_area      TEXT,
+            instr_type      TEXT,
+            instr_desc      TEXT,
+            area            TEXT,
+            cwa             TEXT,
+            ex_type         TEXT,
+            signal_type     TEXT,
+            io_type2        TEXT,
+            system2         TEXT,
+            fgs_via_system2 INTEGER DEFAULT 0,
+            UNIQUE(import_id, tag_number) ON CONFLICT IGNORE
+        )
+    """)
+    db.execute("INSERT INTO spi_tags_new SELECT * FROM spi_tags")
+    db.execute("DROP TABLE spi_tags")
+    db.execute("ALTER TABLE spi_tags_new RENAME TO spi_tags")
+    db.execute("PRAGMA foreign_keys = ON")
+
+
+def _mig_spi_diffs_fk(db):
+    """Add proper FK on spi_diffs.prev_import_id (SET NULL on delete)."""
+    db.execute("PRAGMA foreign_keys = OFF")
+    db.execute("""
+        CREATE TABLE spi_diffs_new (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            import_id      INTEGER REFERENCES spi_imports(id) ON DELETE CASCADE,
+            prev_import_id INTEGER REFERENCES spi_imports(id) ON DELETE SET NULL,
+            computed_at    TEXT,
+            new_count      INTEGER DEFAULT 0,
+            removed_count  INTEGER DEFAULT 0,
+            changed_count  INTEGER DEFAULT 0,
+            diff_json      TEXT
+        )
+    """)
+    db.execute("INSERT INTO spi_diffs_new SELECT * FROM spi_diffs")
+    db.execute("DROP TABLE spi_diffs")
+    db.execute("ALTER TABLE spi_diffs_new RENAME TO spi_diffs")
+    db.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db():
     db = get_db()
     db.executescript("""
@@ -90,9 +200,6 @@ def init_db():
             system2         TEXT,
             fgs_via_system2 INTEGER DEFAULT 0
         );
-        CREATE INDEX IF NOT EXISTS idx_spi_tags_import  ON spi_tags(import_id);
-        CREATE INDEX IF NOT EXISTS idx_spi_tags_system1 ON spi_tags(system1);
-        CREATE INDEX IF NOT EXISTS idx_spi_tags_system2 ON spi_tags(system2);
         CREATE TABLE IF NOT EXISTS spi_diffs (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             import_id      INTEGER REFERENCES spi_imports(id) ON DELETE CASCADE,
@@ -103,6 +210,15 @@ def init_db():
             changed_count  INTEGER DEFAULT 0,
             diff_json      TEXT
         );
+    """)
+    _run_migration(db, 'spi_unique_week_label',    _mig_spi_unique_week)
+    _run_migration(db, 'spi_unique_tags_in_import', _mig_spi_unique_tags)
+    _run_migration(db, 'spi_diffs_prev_fk',         _mig_spi_diffs_fk)
+    # Indexes last — recreated after any table migrations above
+    db.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_spi_tags_import  ON spi_tags(import_id);
+        CREATE INDEX IF NOT EXISTS idx_spi_tags_system1 ON spi_tags(system1);
+        CREATE INDEX IF NOT EXISTS idx_spi_tags_system2 ON spi_tags(system2);
         CREATE INDEX IF NOT EXISTS idx_spi_diffs_import ON spi_diffs(import_id);
     """)
     db.commit()
@@ -262,6 +378,21 @@ def import_spi():
         tmp_path = tmp.name
 
     week_label = _extract_week(f.filename)
+
+    # Reject duplicate week — same week already imported
+    db = get_db()
+    existing = db.execute(
+        "SELECT id, filename, imported_at FROM spi_imports WHERE week_label=?", (week_label,)
+    ).fetchone()
+    db.close()
+    if existing:
+        return jsonify({
+            'error': f'Already imported: {week_label} (file: {existing["filename"]}, '
+                     f'imported {existing["imported_at"][:10]}). '
+                     f'Delete the existing import first if you want to replace it.',
+            'existing_import_id': existing['id'],
+        }), 409
+
     _log(f"[SPI] Importing {f.filename} ({week_label})...")
 
     try:
@@ -282,7 +413,7 @@ def import_spi():
 
     insert_cols = [c for c in _COLS if c != 'fgs_via_system2'] + ['fgs_via_system2']
     db.executemany(
-        f"INSERT INTO spi_tags (import_id, {', '.join(insert_cols)}) "
+        f"INSERT OR IGNORE INTO spi_tags (import_id, {', '.join(insert_cols)}) "
         f"VALUES (:import_id, {', '.join(':'+c for c in insert_cols)})",
         [{**t, 'import_id': import_id} for t in tags]
     )

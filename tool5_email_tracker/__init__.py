@@ -36,7 +36,65 @@ STATUSES   = ["Open", "In Progress", "Closed"]
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def _run_migration(db, key, fn):
+    db.execute("CREATE TABLE IF NOT EXISTS _migrations (key TEXT PRIMARY KEY)")
+    db.commit()
+    if not db.execute("SELECT 1 FROM _migrations WHERE key=?", (key,)).fetchone():
+        fn(db)
+        db.execute("INSERT OR IGNORE INTO _migrations (key) VALUES (?)", (key,))
+        db.commit()
+
+
+def _mig_email_unique_sender(db):
+    """Deduplicate emails by (sender, subject, sent_date), then add UNIQUE constraint."""
+    db.execute("PRAGMA foreign_keys = OFF")
+    # Find duplicates — keep lowest id per combination
+    dupes = db.execute("""
+        SELECT id FROM emails WHERE id NOT IN (
+            SELECT MIN(id) FROM emails
+            GROUP BY COALESCE(sender,''), COALESCE(subject,''), COALESCE(sent_date,'')
+        )
+    """).fetchall()
+    if dupes:
+        ids = [r[0] for r in dupes]
+        ph = ','.join('?' * len(ids))
+        # Reassign action_items and chunks to the surviving email_id
+        for dup_id in ids:
+            row = db.execute(
+                "SELECT sender, subject, sent_date FROM emails WHERE id=?", (dup_id,)
+            ).fetchone()
+            if row:
+                keep = db.execute(
+                    "SELECT id FROM emails WHERE sender=? AND subject=? AND sent_date=? "
+                    "AND id != ? ORDER BY id LIMIT 1",
+                    (row['sender'], row['subject'], row['sent_date'], dup_id)
+                ).fetchone()
+                if keep:
+                    db.execute("UPDATE action_items SET email_id=? WHERE email_id=?",
+                               (keep['id'], dup_id))
+                    db.execute("DELETE FROM email_chunks WHERE email_id=?", (dup_id,))
+        db.execute(f"DELETE FROM emails WHERE id IN ({ph})", ids)
+        _log(f"[Email migration] Removed {len(ids)} duplicate email(s)")
+    db.execute("""
+        CREATE TABLE emails_new (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename    TEXT,
+            sender      TEXT,
+            subject     TEXT,
+            sent_date   TEXT,
+            body_text   TEXT,
+            imported_at TEXT,
+            UNIQUE(sender, subject, sent_date)
+        )
+    """)
+    db.execute("INSERT INTO emails_new SELECT * FROM emails")
+    db.execute("DROP TABLE emails")
+    db.execute("ALTER TABLE emails_new RENAME TO emails")
+    db.execute("PRAGMA foreign_keys = ON")
 
 
 def init_db():
@@ -112,7 +170,7 @@ def init_db():
     """)
     os.makedirs(ATTACHMENTS_DIR, exist_ok=True)
     os.makedirs(MEETINGS_DIR, exist_ok=True)
-    # Migrations for existing databases
+    # Column migrations (idempotent — silently skipped if column already exists)
     for col in [
         "ALTER TABLE action_items ADD COLUMN scope TEXT DEFAULT ''",
         "ALTER TABLE action_items ADD COLUMN meeting_id INTEGER",
@@ -122,6 +180,7 @@ def init_db():
         except Exception:
             pass
     conn.commit()
+    _run_migration(conn, 'email_unique_sender_subject_date', _mig_email_unique_sender)
     conn.close()
 
 
