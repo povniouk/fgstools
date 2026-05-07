@@ -42,6 +42,59 @@ def get_db():
 
 _DIFF_FIELDS = ['rev', 'rev_purp', 'rev_date', 'state', 'trans_out_date', 'title', 'client_ref']
 
+# Shared regex patterns for matching spec filenames against GAIA refs
+_RE_CLIENT_REF = re.compile(r'(CWLNG[-_]\w+[-_]\w+[-_]\w+[-_]\w+[-_]\d+)', re.IGNORECASE)
+_RE_INTERNAL_REF = re.compile(r'(\d{6}[A-Z]-\d{3}-[A-Z]+-\d{4}-\d{4})', re.IGNORECASE)
+
+
+def match_spec_to_gaia(db, filename):
+    """Match a spec filename against the latest GAIA import.
+    Returns (ref, client_ref) if matched, (None, None) otherwise."""
+    imp_id = _latest_import_id(db)
+    if not imp_id:
+        return None, None
+    m = _RE_CLIENT_REF.search(filename)
+    if m:
+        cr = m.group(1).replace('_', '-').upper()
+        row = db.execute(
+            "SELECT ref, client_ref FROM gaia_docs WHERE import_id=? AND client_ref=? LIMIT 1",
+            (imp_id, cr)
+        ).fetchone()
+        if row:
+            return row['ref'], row['client_ref']
+    m2 = _RE_INTERNAL_REF.search(filename)
+    if m2:
+        r = m2.group(1).upper()
+        row = db.execute(
+            "SELECT ref, client_ref FROM gaia_docs WHERE import_id=? AND ref=? LIMIT 1",
+            (imp_id, r)
+        ).fetchone()
+        if row:
+            return row['ref'], row['client_ref']
+    return None, None
+
+
+def link_spec_file(db, ref, filename, file_path):
+    """Create a gaia_doc_files record for a spec file (source='spec'). Returns True if newly linked."""
+    if not ref:
+        return False
+    fsize = os.path.getsize(file_path) if os.path.isfile(file_path) else 0
+    now = datetime.datetime.utcnow().isoformat()
+    db.execute(
+        "INSERT OR IGNORE INTO gaia_doc_files "
+        "(ref, filename, original_name, file_path, file_size, uploaded_at, source) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (ref, filename, filename, file_path, fsize, now, 'spec')
+    )
+    return db.execute("SELECT changes() AS n").fetchone()['n'] > 0
+
+
+def unlink_spec_file(db, file_path):
+    """Remove gaia_doc_files records pointing to file_path with source='spec'."""
+    db.execute(
+        "DELETE FROM gaia_doc_files WHERE file_path=? AND source='spec'", (file_path,)
+    )
+
 
 def _run_migration(db, key, fn):
     db.execute("CREATE TABLE IF NOT EXISTS _migrations (key TEXT PRIMARY KEY)")
@@ -754,20 +807,14 @@ def seed_watchlist():
     for fname in os.listdir(SPECS_DIR):
         if not fname.lower().endswith('.pdf'):
             continue
-        # Try CLIENT_REF pattern (CWLNG-...) first, then internal REF pattern (078051C-...)
-        cr_key = r_key = None
-        m = re.search(r'(CWLNG[-_]\w+[-_]\w+[-_]\w+[-_]\w+[-_]\d+)', fname, re.IGNORECASE)
+        doc = None
+        m = _RE_CLIENT_REF.search(fname)
         if m:
-            cr_key = m.group(1).replace('_', '-').upper()
-            doc = all_docs.get(cr_key)
+            doc = all_docs.get(m.group(1).replace('_', '-').upper())
         else:
-            # Try internal REF: e.g. 078051C-000-CN-1930-0002
-            m2 = re.search(r'(\d{6}[A-Z]-\d{3}-[A-Z]+-\d{4}-\d{4})', fname, re.IGNORECASE)
+            m2 = _RE_INTERNAL_REF.search(fname)
             if m2:
-                r_key = m2.group(1).upper()
-                doc = all_ref_docs.get(r_key)
-            else:
-                unmatched += 1; unmatched_names.append(fname); continue
+                doc = all_ref_docs.get(m2.group(1).upper())
         if not doc:
             unmatched += 1; unmatched_names.append(fname); continue
         try:
@@ -923,11 +970,11 @@ def link_specs_to_docs():
             continue
         fpath = os.path.join(SPECS_DIR, fname)
         doc = None
-        m = re.search(r'(CWLNG[-_]\w+[-_]\w+[-_]\w+[-_]\w+[-_]\d+)', fname, re.IGNORECASE)
+        m = _RE_CLIENT_REF.search(fname)
         if m:
             doc = all_docs.get(m.group(1).replace('_', '-').upper())
         else:
-            m2 = re.search(r'(\d{6}[A-Z]-\d{3}-[A-Z]+-\d{4}-\d{4})', fname, re.IGNORECASE)
+            m2 = _RE_INTERNAL_REF.search(fname)
             if m2:
                 doc = all_ref_docs.get(m2.group(1).upper())
         if not doc:

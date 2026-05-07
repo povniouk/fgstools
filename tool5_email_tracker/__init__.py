@@ -266,6 +266,7 @@ Return a JSON array where each element has exactly these fields:
 - "deadline": date as YYYY-MM-DD if mentioned, else ""
 - "category": exactly one of ["Comment response", "IFR submittal", "Technical query", "Information request", "Meeting action"]
 - "priority": exactly one of ["Low", "Medium", "High", "Critical"]
+- "document_ref": if the email explicitly mentions a document reference number (e.g. "CWLNG-TEN-000-INC-SPC-00020" or "078051C-000-CN-1930-0002"), put it here, else ""
 
 EXAMPLE — for an email saying "Please read the FGS Spec. Jason LeBlanc is the PIC for FGS design.":
 [
@@ -587,8 +588,8 @@ def approve_items():
         conn.execute(
             "INSERT INTO action_items "
             "(email_id, discipline, scope, action, blocking_point, "
-            " deadline, category, priority, status, notes, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " deadline, category, priority, status, notes, created_at, document_ref) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (email_id,
              item.get("discipline", ""),
              item.get("scope", ""),
@@ -599,7 +600,8 @@ def approve_items():
              item.get("priority", "Medium"),
              "Open",
              item.get("notes", ""),
-             now),
+             now,
+             item.get("document_ref", "")),
         )
     conn.commit()
     conn.close()
@@ -657,11 +659,12 @@ def update_item(item_id):
     conn.execute("""
         UPDATE action_items SET
             action=?, discipline=?, scope=?, priority=?,
-            deadline=?, blocking_point=?, status=?
+            deadline=?, blocking_point=?, status=?, document_ref=?
         WHERE id=?
     """, (data.get("action", ""), data.get("discipline", ""), data.get("scope", ""),
           data.get("priority", "Medium"), data.get("deadline", ""),
           1 if data.get("blocking_point") else 0, data.get("status", "Open"),
+          data.get("document_ref", ""),
           item_id))
     conn.commit()
     conn.close()

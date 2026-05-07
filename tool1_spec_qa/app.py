@@ -2,6 +2,7 @@ import os
 import re
 import json
 import queue
+import sqlite3
 import datetime
 import requests
 from collections import deque
@@ -12,6 +13,7 @@ import retriever as _retriever
 
 app = Flask(__name__, static_folder="static")
 
+DB_PATH    = os.environ.get("DB_PATH", "cwlng.db")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:latest")
 SPECS_DIR = os.environ.get("SPECS_DIR", "specs")
@@ -251,7 +253,31 @@ def upload_spec():
     log_info(f"Parsed {f.filename}: {len(chunks)} chunks indexed")
     meta = load_metadata(f.filename)
     refresh_cache()
-    return jsonify({"loaded": f.filename, "chunks": len(chunks), "meta": meta})
+
+    # Register in spec_revisions and auto-link to GAIA doc register
+    gaia_ref = gaia_client_ref = None
+    gaia_linked = False
+    db = _spec_db()
+    gaia_ref, gaia_client_ref = _doc_register.match_spec_to_gaia(db, f.filename)
+    if gaia_ref:
+        gaia_linked = _doc_register.link_spec_file(db, gaia_ref, f.filename, save_path)
+    db.execute(
+        "INSERT OR REPLACE INTO spec_revisions "
+        "(filename, file_path, doc_number, title, revision, rev_date, ref, client_ref, added_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (f.filename, save_path, meta.get('doc_number'), meta.get('title'),
+         meta.get('revision'), meta.get('rev_date'), gaia_ref, gaia_client_ref,
+         datetime.datetime.utcnow().isoformat())
+    )
+    db.commit()
+    db.close()
+    if gaia_linked:
+        log_info(f"Auto-linked {f.filename} → GAIA {gaia_ref}")
+
+    return jsonify({
+        "loaded": f.filename, "chunks": len(chunks), "meta": meta,
+        "gaia_linked": gaia_linked, "gaia_ref": gaia_ref, "gaia_client_ref": gaia_client_ref,
+    })
 
 
 @app.route("/pdf/<path:filename>")
@@ -262,12 +288,18 @@ def serve_pdf(filename):
 @app.route("/api/specs/<path:filename>", methods=["DELETE"])
 def delete_spec(filename):
     base = os.path.join(SPECS_DIR, filename)
+    fpath = base
     for suffix in ("", ".chunks.json", ".meta.json"):
         p = base + suffix
         if os.path.exists(p):
             os.remove(p)
     _specs_cache.pop(filename, None)
     refresh_cache()
+    db = _spec_db()
+    _doc_register.unlink_spec_file(db, fpath)
+    db.execute("DELETE FROM spec_revisions WHERE filename=?", (filename,))
+    db.commit()
+    db.close()
     log_info(f"Deleted spec: {filename}")
     return jsonify({"ok": True})
 
@@ -486,6 +518,70 @@ def debug_chunks():
     return Response("\n".join(out), mimetype="text/plain")
 
 
+def _spec_db():
+    db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys = ON")
+    return db
+
+
+def _init_spec_revisions():
+    db = _spec_db()
+    db.execute("CREATE TABLE IF NOT EXISTS _migrations (key TEXT PRIMARY KEY)")
+    db.commit()
+    if not db.execute("SELECT 1 FROM _migrations WHERE key='spec_revisions_v1'").fetchone():
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS spec_revisions (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename   TEXT NOT NULL UNIQUE,
+                file_path  TEXT NOT NULL,
+                doc_number TEXT,
+                title      TEXT,
+                revision   TEXT,
+                rev_date   TEXT,
+                ref        TEXT,
+                client_ref TEXT,
+                added_at   TEXT
+            )
+        """)
+        db.execute("INSERT OR IGNORE INTO _migrations (key) VALUES ('spec_revisions_v1')")
+        db.commit()
+        log_info("spec_revisions table created")
+    # Backfill existing specs not yet registered
+    if os.path.exists(SPECS_DIR):
+        for fname in os.listdir(SPECS_DIR):
+            if not fname.lower().endswith('.pdf'):
+                continue
+            if db.execute("SELECT 1 FROM spec_revisions WHERE filename=?", (fname,)).fetchone():
+                continue
+            fpath = os.path.join(SPECS_DIR, fname)
+            meta = load_metadata(fname)
+            ref, client_ref = _doc_register.match_spec_to_gaia(db, fname)
+            if ref:
+                _doc_register.link_spec_file(db, ref, fname, fpath)
+            db.execute(
+                "INSERT OR IGNORE INTO spec_revisions "
+                "(filename, file_path, doc_number, title, revision, rev_date, ref, client_ref, added_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (fname, fpath, meta.get('doc_number'), meta.get('title'),
+                 meta.get('revision'), meta.get('rev_date'), ref, client_ref,
+                 datetime.datetime.utcnow().isoformat())
+            )
+        db.commit()
+    db.close()
+
+
+@app.route("/api/specs/revisions", methods=["GET"])
+def list_spec_revisions():
+    db = _spec_db()
+    rows = db.execute(
+        "SELECT filename, doc_number, title, revision, rev_date, ref, client_ref, added_at "
+        "FROM spec_revisions ORDER BY filename"
+    ).fetchall()
+    db.close()
+    return jsonify({"revisions": [dict(r) for r in rows]})
+
+
 def preload_specs():
     if not os.path.exists(SPECS_DIR):
         return
@@ -515,6 +611,7 @@ if __name__ == "__main__":
     _email_tracker.init_db()
     _spi_checker.init_db()
     _doc_register.init_db()
+    _init_spec_revisions()
     preload_specs()
     log_info("App ready.")
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

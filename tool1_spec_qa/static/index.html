@@ -1129,6 +1129,14 @@
           </div>
         </div>
       </div>
+      <div class="panel-field" style="margin-top:2px;">
+        <label>Document Ref</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="panelDocRef" placeholder="CWLNG-TEN-… or 078051C-…"
+                 style="flex:1;background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;color:#cccccc;padding:5px 8px;font-size:0.83rem;font-family:inherit;">
+          <span id="panelDocRefLink" style="display:none;"></span>
+        </div>
+      </div>
       <div class="panel-field" style="margin-top:4px;">
         <label>Attachments</label>
         <div id="attachDrop" class="attach-drop">
@@ -1412,7 +1420,12 @@
         const res = await fetch("/api/upload", { method: "POST", body: formData });
         const data = await res.json();
         if (data.error) { setStatus("loadStatus", "error", data.error); }
-        else { setStatus("loadStatus", "ok", `Loaded: ${data.loaded} (${data.chunks} chunks)`); refreshSpecsManage(); refreshSpecsQA(); }
+        else {
+          const gaiaNote = data.gaia_linked ? ` — linked to GAIA ${data.gaia_ref}` :
+                           data.gaia_ref    ? ` — GAIA ${data.gaia_ref} already linked` : '';
+          setStatus("loadStatus", "ok", `Loaded: ${data.loaded} (${data.chunks} chunks)${gaiaNote}`);
+          refreshSpecsManage(); refreshSpecsQA();
+        }
       } catch { setStatus("loadStatus", "error", "Connection error."); }
     }
 
@@ -1769,6 +1782,10 @@
                 <label>Deadline</label>
                 <input type="date" data-field="deadline" value="${item.deadline||''}">
               </div>
+              <div class="draft-field full">
+                <label>Document Ref <span style="color:#555;font-weight:400;text-transform:none;">(GAIA REF if detected)</span></label>
+                <input type="text" data-field="document_ref" value="${escHtml(item.document_ref||'')}" placeholder="e.g. CWLNG-TEN-000-INC-SPC-00020">
+              </div>
             </div>
           </div>`).join('');
       }
@@ -2050,6 +2067,14 @@
         ['Open','In Progress','Closed'].map(s=>`<option${s===item.status?' selected':''}>${s}</option>`).join('');
       document.getElementById("panelDeadline").value = item.deadline || '';
       document.getElementById("panelBlocking").checked = !!item.blocking_point;
+      const docRef = item.document_ref || '';
+      document.getElementById("panelDocRef").value = docRef;
+      const linkEl = document.getElementById("panelDocRefLink");
+      if (docRef) {
+        linkEl.style.display = '';
+        linkEl.innerHTML = `<a href="#" onclick="event.preventDefault();findGaiaDocByRef(${JSON.stringify(docRef)})"
+          style="font-size:0.75rem;color:#007acc;white-space:nowrap;">Open in Register →</a>`;
+      } else { linkEl.style.display = 'none'; }
       document.getElementById("panelMeta").innerHTML =
         `<div><strong>From:</strong> ${escHtml(item.sender||'—')}</div>` +
         `<div><strong>Subject:</strong> ${escHtml(item.subject||'—')}</div>` +
@@ -2093,6 +2118,17 @@
       }
     }
 
+    function findGaiaDocByRef(ref) {
+      if (!ref) return;
+      closeItemPanel();
+      showPage('doc-register');
+      showGaiaTab('register');
+      setTimeout(() => {
+        const s = document.getElementById('gaiaSearch');
+        if (s) { s.value = ref; debounceGaia(); }
+      }, 300);
+    }
+
     function closeItemPanel() {
       document.getElementById("sidePanel").classList.remove("open");
       document.getElementById("sidePanelBackdrop").classList.remove("open");
@@ -2109,6 +2145,7 @@
         status:         document.getElementById("panelStatus").value,
         deadline:       document.getElementById("panelDeadline").value,
         blocking_point: document.getElementById("panelBlocking").checked,
+        document_ref:   document.getElementById("panelDocRef").value.trim(),
       };
       const res = await fetch(`/api/email/items/${_panelItemId}`, {
         method: "PUT", headers: {"Content-Type":"application/json"},
