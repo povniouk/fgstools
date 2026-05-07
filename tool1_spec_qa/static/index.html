@@ -125,6 +125,32 @@
     #sidePanelBackdrop.open { display: block; }
     #sidePanel { position: fixed; top: 0; right: -460px; width: 420px; height: 100vh; background: #252526; border-left: 1px solid #3c3c3c; z-index: 200; display: flex; flex-direction: column; transition: right 0.25s ease; }
     #sidePanel.open { right: 0; }
+    /* GAIA doc detail panel */
+    #gaiaPanelBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 199; display: none; }
+    #gaiaPanelBackdrop.open { display: block; }
+    #gaiaPanel { position: fixed; top: 0; right: -520px; width: 480px; height: 100vh; background: #252526; border-left: 1px solid #3c3c3c; z-index: 200; display: flex; flex-direction: column; transition: right 0.25s ease; }
+    #gaiaPanel.open { right: 0; }
+    /* GAIA register table */
+    .gaia-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .gaia-table th { text-align: left; padding: 7px 10px; color: #858585; font-weight: 600; border-bottom: 1px solid #3c3c3c; white-space: nowrap; }
+    .gaia-table td { padding: 7px 10px; border-bottom: 1px solid #2d2d2d; vertical-align: middle; }
+    .gaia-table tr.doc-row { cursor: pointer; }
+    .gaia-table tr.doc-row:hover td { background: #2a2d2e; }
+    .gaia-all-fields { margin-top: 12px; }
+    .gaia-all-fields summary { color: #858585; font-size: 0.78rem; cursor: pointer; padding: 4px 0; }
+    .gaia-field-grid { display: grid; grid-template-columns: 160px 1fr; gap: 3px 10px; font-size: 0.78rem; margin-top: 8px; max-height: 400px; overflow-y: auto; }
+    .gaia-field-key { color: #858585; padding: 2px 0; word-break: break-all; }
+    .gaia-field-val { color: #cccccc; padding: 2px 0; word-break: break-all; }
+    .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
+    .sortable-th:hover { color: #cccccc; }
+    .sort-arrow { font-size: 0.65rem; margin-left: 3px; opacity: 0.5; }
+    .sort-arrow.active { opacity: 1; color: #007acc; }
+    .file-chip { display:inline-flex; align-items:center; gap:5px; background:#1a2a3a; border:1px solid #2a4a6a; border-radius:3px; padding:3px 8px; font-size:0.78rem; color:#9cdcfe; cursor:pointer; text-decoration:none; }
+    .file-chip:hover { background:#2a3a4a; }
+    .file-del { background:none; border:none; color:#555; cursor:pointer; padding:0 2px; font-size:0.8rem; }
+    .file-del:hover { color:#f44747; }
+    .file-drop { border:1px dashed #3c3c3c; border-radius:3px; padding:14px; text-align:center; cursor:pointer; font-size:0.8rem; color:#555; transition:border-color 0.15s; }
+    .file-drop:hover, .file-drop.drag-over { border-color:#007acc; color:#858585; }
     .sp-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid #3c3c3c; background: #2d2d2d; flex-shrink: 0; }
     .sp-body { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
     .sp-footer { padding: 12px 18px; border-top: 1px solid #3c3c3c; display: flex; gap: 8px; flex-shrink: 0; }
@@ -317,6 +343,7 @@
       <div class="dash-tab active" onclick="showDash('specqa')">Spec Q&amp;A</div>
       <div class="dash-tab" onclick="showDash('email')">Project Tracker</div>
       <div class="dash-tab" onclick="showDash('spi')">SPI Checker</div>
+      <div class="dash-tab" onclick="showDash('register')">Doc Register</div>
       <div class="dash-tab" onclick="showDash('cande')">C&amp;E Checker <span class="badge">soon</span></div>
       <div class="dash-tab" onclick="showDash('admin')">Admin</div>
     </nav>
@@ -326,10 +353,15 @@
   <div id="page-overview" class="page">
     <div class="container">
       <div class="kpi-grid">
-        <div class="kpi-card">
+        <div class="kpi-card" style="cursor:pointer;" onclick="showDash('email')">
           <div class="kpi-label">Open Actions</div>
           <div class="kpi-value warn" id="kpi-actions">—</div>
-          <div class="kpi-sub">Email tracker not yet active</div>
+          <div class="kpi-sub" id="kpi-actions-sub">Project Tracker</div>
+        </div>
+        <div class="kpi-card" style="cursor:pointer;" onclick="showDash('register');setTimeout(()=>showGaiaTab('watchlist',document.querySelectorAll('#page-register .sub-tab')[2]),100)">
+          <div class="kpi-label">Watchlist Updates</div>
+          <div class="kpi-value" id="kpi-wl">—</div>
+          <div class="kpi-sub" id="kpi-wl-sub">docs changed since last ack</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Specs Loaded</div>
@@ -339,7 +371,12 @@
         <div class="kpi-card">
           <div class="kpi-label">Last SPI Import</div>
           <div class="kpi-value" id="kpi-spi">—</div>
-          <div class="kpi-sub">SPI checker not yet active</div>
+          <div class="kpi-sub" id="kpi-spi-sub">SPI Checker</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Last Doc Import</div>
+          <div class="kpi-value" id="kpi-gaia">—</div>
+          <div class="kpi-sub" id="kpi-gaia-sub">Doc Register</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">AI Model</div>
@@ -347,9 +384,19 @@
           <div class="kpi-sub" id="kpi-ollama">Connecting...</div>
         </div>
       </div>
-      <div class="section">
+
+      <!-- Watchlist alerts notification panel -->
+      <div class="section" id="overviewAlerts" style="display:none;">
+        <div class="section-header">
+          <h2>Watchlist Alerts</h2>
+          <button class="spi-load-btn" onclick="showDash('register');setTimeout(()=>showGaiaTab('watchlist',document.querySelectorAll('#page-register .sub-tab')[2]),100)">Go to Watchlist →</button>
+        </div>
+        <div id="overviewAlertsList"></div>
+      </div>
+
+      <div class="section" id="overviewStatus">
         <h2>Status</h2>
-        <p style="color:#555;font-size:0.85rem;padding:8px 0;">Dashboard is operational. Tools will populate this view as they come online.</p>
+        <p style="color:#555;font-size:0.85rem;padding:8px 0;">Dashboard is operational.</p>
       </div>
     </div>
   </div>
@@ -788,6 +835,186 @@
     </div>
   </div>
 
+  <!-- ── Doc Register (Tool 8) ── -->
+  <div id="page-register" class="page">
+    <div class="container">
+      <div class="sub-nav">
+        <div class="sub-tab active" onclick="showGaiaTab('import', this)">Import</div>
+        <div class="sub-tab" onclick="showGaiaTab('register', this)">Register</div>
+        <div class="sub-tab" onclick="showGaiaTab('watchlist', this)">Watchlist</div>
+      </div>
+
+      <!-- Import sub-page -->
+      <div id="gaiaPage-import">
+        <div class="section">
+          <div class="section-header"><h2>Drop GAIA XML Export</h2></div>
+          <div id="gaiaDropZone" style="border:1px dashed #3c3c3c;border-radius:4px;padding:36px;text-align:center;cursor:pointer;transition:border-color 0.2s;">
+            <div style="color:#858585;font-size:0.9rem;">Drag a <strong style="color:#cccccc;">GAIA Advitium .xml</strong> here, or click to select</div>
+            <div style="color:#555;font-size:0.78rem;margin-top:8px;">Filename should start with the export date, e.g. 20260506-EngDoc MDR_v2_new.xml</div>
+            <div style="color:#3c3c3c;font-size:0.72rem;margin-top:6px;">The companion .xlsm is just an Excel viewer — ignore it, drop the .xml.</div>
+            <input type="file" id="gaiaFileInput" accept=".xml" style="display:none" onchange="uploadGaia(this.files[0])">
+          </div>
+          <div class="status" id="gaiaUploadStatus"></div>
+          <div id="gaiaImportSummary" class="spi-import-summary"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-header"><h2>Import History</h2></div>
+          <div id="gaiaHistory"><span style="color:#555;font-size:0.85rem;">No imports yet.</span></div>
+        </div>
+      </div>
+
+      <!-- Register sub-page -->
+      <div id="gaiaPage-register" style="display:none">
+        <div class="section">
+          <div class="spi-filters">
+            <div>
+              <label>Discipline</label>
+              <select class="filter-select" id="gaiaFilterDisc" onchange="loadGaiaRegister()">
+                <option value="HSE Design">HSE Design</option>
+                <option value="">All</option>
+              </select>
+            </div>
+            <div>
+              <label>OC</label>
+              <select class="filter-select" id="gaiaFilterOC" onchange="loadGaiaRegister()">
+                <option value="">All</option>
+                <option>HOC</option><option>BoOC</option><option>POC</option>
+              </select>
+            </div>
+            <div>
+              <label>State</label>
+              <select class="filter-select" id="gaiaFilterState" onchange="loadGaiaRegister()">
+                <option value="">All</option>
+              </select>
+            </div>
+            <div>
+              <label>Rev Purpose</label>
+              <select class="filter-select" id="gaiaFilterRevPurp" onchange="loadGaiaRegister()">
+                <option value="">All</option>
+              </select>
+            </div>
+            <div style="flex:1;min-width:200px;">
+              <label>Search (REF / Client REF / Title)</label>
+              <input type="text" id="gaiaSearch" placeholder="e.g. PDS-1547 or fire zone" oninput="debounceGaia()" style="width:100%;background:#3c3c3c;border:1px solid #3c3c3c;border-radius:2px;padding:6px 10px;color:#cccccc;font-size:0.85rem;box-sizing:border-box;">
+            </div>
+          </div>
+          <div id="gaiaRegCount" style="font-size:0.78rem;color:#555;margin-bottom:8px;"></div>
+          <div style="overflow-x:auto;">
+            <table class="gaia-table">
+              <thead>
+                <tr>
+                  <th class="sortable-th" onclick="sortReg('ref')">REF <span class="sort-arrow" id="sarr-ref">▲</span></th>
+                  <th class="sortable-th" onclick="sortReg('client_ref')">Client REF <span class="sort-arrow" id="sarr-client_ref">▲</span></th>
+                  <th>Title</th>
+                  <th class="sortable-th" onclick="sortReg('rev')">Rev <span class="sort-arrow" id="sarr-rev">▲</span></th>
+                  <th>Rev Purp</th>
+                  <th class="sortable-th" onclick="sortReg('state')">State <span class="sort-arrow" id="sarr-state">▲</span></th>
+                  <th>OC</th>
+                  <th class="sortable-th" onclick="sortReg('trans_out_date')">Trans Out <span class="sort-arrow" id="sarr-trans_out_date">▲</span></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="gaiaRegBody">
+                <tr><td colspan="9" style="color:#555;text-align:center;padding:24px;">Use the Import tab to load a GAIA xml, then click View.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- Watchlist sub-page -->
+      <div id="gaiaPage-watchlist" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <h2>Watchlist</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn-save" id="wlAckAllBtn" onclick="ackAllWatchlist()" style="padding:5px 12px;font-size:0.82rem;display:none;">✓ Ack All (<span id="wlAckAllCount">0</span>)</button>
+              <button class="spi-load-btn" onclick="exportWlCsv()">Export CSV</button>
+              <button class="spi-load-btn" onclick="toggleWlPanel('wlSeedPanel')">Seed from Specs</button>
+              <button class="spi-load-btn" onclick="linkSpecsToGaia()">Link Spec PDFs</button>
+              <button class="spi-load-btn" onclick="toggleWlPanel('wlBulkPanel')">Bulk Add</button>
+              <button class="spi-load-btn" onclick="toggleWlPanel('wlAddPanel')">+ Add</button>
+            </div>
+          </div>
+
+          <!-- Seed from Specs panel -->
+          <div id="wlSeedPanel" style="display:none;background:#1e1e1e;border:1px solid #3c3c3c;border-radius:3px;padding:14px;margin-bottom:12px;">
+            <p style="color:#858585;font-size:0.82rem;margin:0 0 10px 0;">Scan <code style="color:#ce9178;">~/spec-qa/specs/</code> for PDF filenames containing a CLIENT_REF pattern and add matching docs to the watchlist.</p>
+            <button class="btn-save" onclick="seedWatchlist()" style="padding:5px 14px;">Run Seed</button>
+            <div id="wlSeedStatus" class="status" style="margin-top:8px;"></div>
+          </div>
+
+          <!-- Bulk add panel -->
+          <div id="wlBulkPanel" style="display:none;background:#1e1e1e;border:1px solid #3c3c3c;border-radius:3px;padding:14px;margin-bottom:12px;">
+            <p style="color:#858585;font-size:0.82rem;margin:0 0 8px 0;">Paste REFs or CLIENT_REFs (one per line, or comma-separated):</p>
+            <textarea id="wlBulkRefs" rows="5" style="width:100%;background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:8px;color:#cccccc;font-family:Consolas,monospace;font-size:0.82rem;resize:vertical;box-sizing:border-box;" placeholder="078051C-000-CN-1930-0001&#10;CWLNG-TEN-000-FPT-PHI-00001&#10;..."></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+              <select id="wlBulkPriority" class="filter-select">
+                <option>Normal</option><option>High</option><option>Low</option>
+              </select>
+              <button class="btn-save" onclick="bulkAddWatchlist()" style="padding:5px 14px;">Add All</button>
+              <div id="wlBulkStatus" class="status" style="flex:1;"></div>
+            </div>
+          </div>
+
+          <!-- Manual add panel -->
+          <div id="wlAddPanel" style="display:none;background:#1e1e1e;border:1px solid #3c3c3c;border-radius:3px;padding:14px;margin-bottom:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+              <div class="panel-field" style="margin:0;"><label>REF</label><input type="text" id="wlAddRef" placeholder="078051C-000-CN-1930-0001" style="background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:6px 8px;color:#cccccc;font-size:0.83rem;width:100%;box-sizing:border-box;"></div>
+              <div class="panel-field" style="margin:0;"><label>Client REF</label><input type="text" id="wlAddClientRef" placeholder="CWLNG-TEN-000-FPT-PHI-00001" style="background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:6px 8px;color:#cccccc;font-size:0.83rem;width:100%;box-sizing:border-box;"></div>
+              <div class="panel-field" style="margin:0;grid-column:1/-1;"><label>Title (optional — auto-filled from register)</label><input type="text" id="wlAddTitle" style="background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:6px 8px;color:#cccccc;font-size:0.83rem;width:100%;box-sizing:border-box;"></div>
+              <div class="panel-field" style="margin:0;"><label>Priority</label>
+                <select id="wlAddPriority" class="filter-select" style="width:100%;">
+                  <option>Normal</option><option>High</option><option>Low</option>
+                </select>
+              </div>
+              <div class="panel-field" style="margin:0;"><label>Notes</label><input type="text" id="wlAddNotes" style="background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:6px 8px;color:#cccccc;font-size:0.83rem;width:100%;box-sizing:border-box;"></div>
+            </div>
+            <button class="btn-save" onclick="addWatchlistItem()" style="padding:5px 14px;">Add</button>
+            <div id="wlAddStatus" class="status" style="display:inline-block;margin-left:10px;"></div>
+          </div>
+
+          <!-- Filter bar -->
+          <div class="spi-filters" style="margin-bottom:10px;">
+            <div>
+              <label>Priority</label>
+              <select class="filter-select" id="wlFilterPriority" onchange="applyWlFilter()">
+                <option value="">All</option><option>High</option><option>Normal</option><option>Low</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="checkbox" id="wlFilterChanged" onchange="applyWlFilter()" style="accent-color:#007acc;">
+              <label for="wlFilterChanged" style="font-size:0.82rem;color:#cccccc;text-transform:none;letter-spacing:0;">Changed only</label>
+            </div>
+          </div>
+
+          <div id="wlCount" style="font-size:0.78rem;color:#555;margin-bottom:8px;"></div>
+          <div style="overflow-x:auto;">
+            <table class="gaia-table" id="wlTable">
+              <thead>
+                <tr>
+                  <th class="sortable-th" onclick="sortWl('priority')">Priority <span class="sort-arrow" id="wsarr-priority">▲</span></th>
+                  <th class="sortable-th" onclick="sortWl('ref')">REF <span class="sort-arrow" id="wsarr-ref">▲</span></th>
+                  <th>Client REF</th>
+                  <th>Title</th>
+                  <th class="sortable-th" onclick="sortWl('rev')">Rev <span class="sort-arrow" id="wsarr-rev">▲</span></th>
+                  <th class="sortable-th" onclick="sortWl('state')">State <span class="sort-arrow" id="wsarr-state">▲</span></th>
+                  <th class="sortable-th" onclick="sortWl('trans_out_date')">Trans Out <span class="sort-arrow" id="wsarr-trans_out_date">▲</span></th>
+                  <th>Files</th>
+                  <th>Δ</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="wlBody">
+                <tr><td colspan="9" style="color:#555;text-align:center;padding:24px;">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── C&E Checker ── -->
   <div id="page-cande" class="page">
     <div class="container">
@@ -927,6 +1154,47 @@
     </div>
   </div>
 
+  <!-- ── GAIA Doc Detail Panel (Tool 8 M2) ── -->
+  <div id="gaiaPanelBackdrop" onclick="closeGaiaPanel()"></div>
+  <div id="gaiaPanel">
+    <div class="sp-header">
+      <span style="font-size:0.85rem;font-weight:600;color:#cccccc;">Document Detail</span>
+      <button onclick="closeGaiaPanel()" style="background:none;border:none;color:#858585;font-size:1.2rem;cursor:pointer;padding:0;line-height:1;">✕</button>
+    </div>
+    <div class="sp-body" id="gaiaPanelBody">
+      <span style="color:#555;font-size:0.85rem;">Select a document from the register.</span>
+    </div>
+    <!-- Watchlist item editor (shown when opened from watchlist) -->
+    <div id="gaiaPanelWlEdit" style="display:none;padding:10px 18px;border-top:1px solid #3c3c3c;background:#1e1e1e;flex-shrink:0;">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <div><label style="font-size:0.72rem;color:#858585;display:block;margin-bottom:3px;">Priority</label>
+          <select id="gaiaPanelWlPriority" class="filter-select">
+            <option>High</option><option>Normal</option><option>Low</option>
+          </select></div>
+        <div style="flex:1;min-width:120px;"><label style="font-size:0.72rem;color:#858585;display:block;margin-bottom:3px;">Notes</label>
+          <input type="text" id="gaiaPanelWlNotes" style="width:100%;background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:5px 8px;color:#cccccc;font-size:0.82rem;box-sizing:border-box;"></div>
+        <div style="align-self:flex-end;">
+          <button onclick="saveWlItemFromPanel()" class="btn-save" style="padding:5px 12px;">Save</button>
+        </div>
+        <div id="gaiaPanelWlEditStatus" style="font-size:0.78rem;color:#4ec9b0;align-self:flex-end;"></div>
+      </div>
+    </div>
+    <!-- Files section -->
+    <div id="gaiaPanelFiles" style="display:none;padding:10px 18px;border-top:1px solid #3c3c3c;flex-shrink:0;">
+      <div style="font-size:0.72rem;color:#858585;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">Documents</div>
+      <div id="gaiaPanelFileList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+      <div class="file-drop" id="gaiaPanelFileDrop">
+        Drop PDF / Word / Excel here, or click to upload
+        <input type="file" id="gaiaPanelFileInput" style="display:none" multiple accept=".pdf,.docx,.doc,.xlsx,.xls" onchange="[...this.files].forEach(f=>uploadGaiaFile(f));this.value=''">
+      </div>
+      <div id="gaiaPanelFileStatus" class="status" style="margin-top:6px;"></div>
+    </div>
+    <div class="sp-footer" id="gaiaPanelFooter" style="display:none;">
+      <button id="gaiaPanelWlBtn" onclick="addCurrentDocToWatchlist()" style="flex:1;">Add to Watchlist</button>
+      <div id="gaiaPanelWlStatus" style="font-size:0.78rem;flex:1;"></div>
+    </div>
+  </div>
+
   <div id="logPanel" class="collapsed">
     <div id="logBar" onclick="toggleLog()">
       <span>Output</span>
@@ -985,6 +1253,7 @@
       if (name === "admin") populateDebugSpecSelect();
       if (name === "email") { /* register loads when its sub-tab is clicked */ }
       if (name === "spi") loadSpiHistory();
+      if (name === "register") loadGaiaHistory();
     }
 
     // --- Sub-navigation (inside Spec Q&A) ---
@@ -998,18 +1267,100 @@
 
     // --- Overview KPIs ---
     async function refreshOverview() {
+      // Specs loaded
       try {
-        const res = await fetch("/api/specs");
-        const data = await res.json();
-        document.getElementById("kpi-specs").textContent = data.specs ? data.specs.length : 0;
+        const d = await (await fetch("/api/specs")).json();
+        document.getElementById("kpi-specs").textContent = d.specs ? d.specs.length : 0;
       } catch {}
+
+      // AI model
       try {
-        const res = await fetch("/api/models");
-        const data = await res.json();
-        document.getElementById("kpi-model").textContent = data.current;
+        const d = await (await fetch("/api/models")).json();
+        document.getElementById("kpi-model").textContent = d.current;
         document.getElementById("kpi-ollama").textContent = "Ollama connected";
-      } catch {
-        document.getElementById("kpi-ollama").textContent = "Ollama unreachable";
+      } catch { document.getElementById("kpi-ollama").textContent = "Ollama unreachable"; }
+
+      // Open actions
+      try {
+        const d = await (await fetch("/api/email/register?status=Open&limit=5000")).json();
+        const n = (d.items || []).length;
+        const el = document.getElementById("kpi-actions");
+        el.textContent = n;
+        el.className = "kpi-value " + (n > 0 ? "warn" : "ok");
+        document.getElementById("kpi-actions-sub").textContent =
+          n === 0 ? "No open actions" : `${n} open item${n !== 1 ? "s" : ""} in Project Tracker`;
+      } catch {}
+
+      // Last SPI import
+      try {
+        const d = await (await fetch("/api/spi/imports")).json();
+        const latest = (d.imports || [])[0];
+        if (latest) {
+          document.getElementById("kpi-spi").textContent = latest.week_label || latest.filename.slice(0,10);
+          document.getElementById("kpi-spi-sub").textContent = `${(latest.fgs_count||0)} F&G tags`;
+        } else {
+          document.getElementById("kpi-spi").textContent = "None";
+          document.getElementById("kpi-spi-sub").textContent = "No SPI import yet";
+        }
+      } catch {}
+
+      // Last GAIA import + watchlist alerts
+      try {
+        const gi = await (await fetch("/api/gaia/imports")).json();
+        const latest = (gi.imports || [])[0];
+        if (latest) {
+          document.getElementById("kpi-gaia").textContent = latest.week_label;
+          document.getElementById("kpi-gaia-sub").textContent = `${latest.total_docs.toLocaleString()} docs`;
+        } else {
+          document.getElementById("kpi-gaia").textContent = "None";
+          document.getElementById("kpi-gaia-sub").textContent = "No import yet";
+        }
+      } catch {}
+
+      // Watchlist alerts
+      try {
+        const wd = await (await fetch("/api/gaia/watchlist")).json();
+        const changed = (wd.items || []).filter(i => i.delta && i.delta.length > 0);
+        const wlEl = document.getElementById("kpi-wl");
+        wlEl.textContent = changed.length;
+        wlEl.className = "kpi-value " + (changed.length > 0 ? "warn" : "ok");
+        document.getElementById("kpi-wl-sub").textContent =
+          changed.length === 0 ? "All acknowledged" : `${changed.length} doc${changed.length !== 1 ? "s" : ""} changed`;
+        renderOverviewAlerts(changed);
+      } catch {}
+    }
+
+    function renderOverviewAlerts(items) {
+      const section = document.getElementById("overviewAlerts");
+      const list    = document.getElementById("overviewAlertsList");
+      if (!items.length) { section.style.display = "none"; return; }
+      section.style.display = "";
+      list.innerHTML = items.slice(0, 20).map(it => {
+        const cur = it.current || {};
+        const chips = (it.delta || []).map(d => {
+          if (d === "REV") {
+            const from = it.last_seen_rev  || "—";
+            const to   = cur.rev           || "—";
+            return `<span style="font-size:0.72rem;background:#3a2a00;color:#d7ba7d;border-radius:2px;padding:1px 6px;">REV ${esc(from)} → ${esc(to)}</span>`;
+          }
+          if (d === "STATE") {
+            const isReleased = (cur.state||"").toLowerCase().includes("issued");
+            const label = isReleased ? "RELEASED" : "STATE";
+            const bg    = isReleased ? "#003a2a" : "#3a2a00";
+            const fg    = isReleased ? "#4ec9b0"  : "#d7ba7d";
+            return `<span style="font-size:0.72rem;background:${bg};color:${fg};border-radius:2px;padding:1px 6px;">${label}</span>`;
+          }
+          return "";
+        }).join(" ");
+        return `<div style="display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid #2a2a2a;flex-wrap:wrap;">
+          <code style="font-size:0.78rem;color:#9cdcfe;flex-shrink:0;">${esc(it.ref||it.client_ref||"")}</code>
+          <span style="color:#cccccc;font-size:0.82rem;flex:1;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(cur.title||it.title||"")}</span>
+          <span style="font-size:0.75rem;color:#555;">${esc(it.priority||"")}</span>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">${chips}</div>
+        </div>`;
+      }).join("");
+      if (items.length > 20) {
+        list.innerHTML += `<div style="color:#555;font-size:0.78rem;padding:6px 0;">… and ${items.length - 20} more</div>`;
       }
     }
 
@@ -2518,10 +2869,713 @@
       out.style.display = "block";
     }
 
+    // ── Tool 8: Doc Register (GAIA xml) ──────────────────────────────
+
+    let _gaiaDebounce = null;
+    let _gaiaCurrentImportId = null;
+    let _gaiaRegDocs = [];
+    let _gaiaRegSort = {col: 'ref', asc: true};
+    let _gaiaWlSort  = {col: null, asc: true};
+
+    function showGaiaTab(name, tab) {
+      document.querySelectorAll('#page-register .sub-tab').forEach(t => t.classList.remove('active'));
+      if (tab) tab.classList.add('active');
+      ['import', 'register', 'watchlist'].forEach(n => {
+        const el = document.getElementById('gaiaPage-' + n);
+        if (el) el.style.display = (n === name) ? '' : 'none';
+      });
+      if (name === 'register' && _gaiaCurrentImportId) loadGaiaRegister();
+      if (name === 'watchlist') loadWatchlist();
+    }
+
+    function debounceGaia() {
+      clearTimeout(_gaiaDebounce);
+      _gaiaDebounce = setTimeout(loadGaiaRegister, 300);
+    }
+
+    async function loadGaiaRegister(importId) {
+      if (importId) _gaiaCurrentImportId = importId;
+      const id = _gaiaCurrentImportId;
+      if (!id) {
+        // auto-use latest
+        const r = await fetch('/api/gaia/imports');
+        const d = await r.json();
+        if (d.imports && d.imports.length) {
+          _gaiaCurrentImportId = d.imports[0].id;
+        } else {
+          document.getElementById('gaiaRegBody').innerHTML =
+            '<tr><td colspan="8" style="color:#555;text-align:center;padding:24px;">No imports yet. Drop an XML file on the Import tab.</td></tr>';
+          return;
+        }
+      }
+      const disc    = document.getElementById('gaiaFilterDisc').value;
+      const oc      = document.getElementById('gaiaFilterOC').value;
+      const state   = document.getElementById('gaiaFilterState').value;
+      const revPurp = document.getElementById('gaiaFilterRevPurp').value;
+      const q       = document.getElementById('gaiaSearch').value.trim();
+      const params  = new URLSearchParams({ import_id: _gaiaCurrentImportId, limit: 10000 });
+      if (disc)    params.set('disc', disc);
+      if (oc)      params.set('oc', oc);
+      if (state)   params.set('state', state);
+      if (revPurp) params.set('rev_purp', revPurp);
+      if (q)       params.set('q', q);
+
+      const res  = await fetch('/api/gaia/docs?' + params);
+      const data = await res.json();
+      const docs = data.docs || [];
+      const total = data.total_in_import != null ? data.total_in_import : null;
+      document.getElementById('gaiaRegCount').textContent =
+        total != null && total !== docs.length
+          ? `${docs.length.toLocaleString()} of ${total.toLocaleString()} documents (filtered)`
+          : `${docs.length.toLocaleString()} document${docs.length !== 1 ? 's' : ''}`;
+
+      if (!docs.length) {
+        document.getElementById('gaiaRegBody').innerHTML =
+          '<tr><td colspan="8" style="color:#555;text-align:center;padding:24px;">No documents match the current filters.</td></tr>';
+        return;
+      }
+
+      _gaiaRegDocs = docs;
+      renderRegTable();
+      populateGaiaFilterOpts(docs);
+    }
+
+    function renderRegTable() {
+      const docs = _sortArr([..._gaiaRegDocs], _gaiaRegSort.col, _gaiaRegSort.asc);
+      document.querySelectorAll('[id^="sarr-"]').forEach(el => {
+        const col = el.id.replace('sarr-', '');
+        el.className = 'sort-arrow' + (col === _gaiaRegSort.col ? ' active' : '');
+        el.textContent = (col === _gaiaRegSort.col && !_gaiaRegSort.asc) ? '▼' : '▲';
+      });
+      if (!docs.length) {
+        document.getElementById('gaiaRegBody').innerHTML =
+          '<tr><td colspan="9" style="color:#555;text-align:center;padding:24px;">No documents match the current filters.</td></tr>';
+        return;
+      }
+      document.getElementById('gaiaRegBody').innerHTML = docs.map(d =>
+        `<tr class="doc-row" onclick="openGaiaDoc(${d.id})">
+          <td><code style="font-size:0.78rem;color:#9cdcfe;">${esc(d.ref||'')}</code></td>
+          <td style="font-size:0.78rem;color:#858585;">${esc(d.client_ref||'')}</td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.title||'')}</td>
+          <td>${esc(d.rev||'')}</td>
+          <td><span style="font-size:0.75rem;color:#858585;">${esc(d.rev_purp||'')}</span></td>
+          <td>${stateChip(d.state)}</td>
+          <td style="font-size:0.78rem;color:#858585;">${esc(d.oc||'')}</td>
+          <td style="font-size:0.78rem;color:#555;">${esc(d.trans_out_date||'')}</td>
+          <td></td>
+        </tr>`
+      ).join('');
+    }
+
+    function sortReg(col) {
+      _gaiaRegSort.asc = _gaiaRegSort.col === col ? !_gaiaRegSort.asc : true;
+      _gaiaRegSort.col = col;
+      renderRegTable();
+    }
+
+    function sortWl(col) {
+      _gaiaWlSort.asc = _gaiaWlSort.col === col ? !_gaiaWlSort.asc : true;
+      _gaiaWlSort.col = col;
+      applyWlFilter();
+    }
+
+    function _sortArr(arr, col, asc) {
+      if (!col) return arr;
+      return arr.sort((a, b) => {
+        const av = (col.includes('.') ? col.split('.').reduce((o,k)=>o&&o[k],a) : a[col]) || '';
+        const bv = (col.includes('.') ? col.split('.').reduce((o,k)=>o&&o[k],b) : b[col]) || '';
+        const r  = String(av).localeCompare(String(bv), undefined, {numeric: true});
+        return asc ? r : -r;
+      });
+    }
+
+    function stateChip(state) {
+      if (!state) return '';
+      const color = state.includes('Released') || state === 'IFC' ? '#4ec9b0'
+                  : state.includes('Review') ? '#d7ba7d'
+                  : '#858585';
+      return `<span style="font-size:0.72rem;color:${color};border:1px solid ${color};border-radius:2px;padding:1px 5px;white-space:nowrap;">${esc(state)}</span>`;
+    }
+
+    let _gaiaOptsDone = false;
+    function populateGaiaFilterOpts(docs) {
+      if (_gaiaOptsDone) return;
+      _gaiaOptsDone = true;
+      const states   = [...new Set(docs.map(d => d.state).filter(Boolean))].sort();
+      const revPurps = [...new Set(docs.map(d => d.rev_purp).filter(Boolean))].sort();
+      const stateEl  = document.getElementById('gaiaFilterState');
+      const rpEl     = document.getElementById('gaiaFilterRevPurp');
+      states.forEach(s => { const o = document.createElement('option'); o.value = s; o.text = s; stateEl.appendChild(o); });
+      revPurps.forEach(r => { const o = document.createElement('option'); o.value = r; o.text = r; rpEl.appendChild(o); });
+    }
+
+    let _gaiaPanelDoc = null;
+
+    async function openGaiaDoc(docId, alreadyWatched, wlItem) {
+      _gaiaPanelDoc = null;
+      _gaiaPanelRef = null;
+      _gaiaPanelWlItemId = null;
+      document.getElementById('gaiaPanelFooter').style.display = 'none';
+      document.getElementById('gaiaPanelFiles').style.display = 'none';
+      document.getElementById('gaiaPanelWlEdit').style.display = 'none';
+      document.getElementById('gaiaPanelWlBtn').style.display = alreadyWatched ? 'none' : '';
+      document.getElementById('gaiaPanelWlStatus').textContent = '';
+      document.getElementById('gaiaPanelBody').innerHTML =
+        '<span style="color:#555;font-size:0.85rem;"><span class="spinner"></span> Loading...</span>';
+      document.getElementById('gaiaPanel').classList.add('open');
+      document.getElementById('gaiaPanelBackdrop').classList.add('open');
+
+      const res  = await fetch('/api/gaia/docs/' + docId);
+      const doc  = await res.json();
+      if (doc.error) {
+        document.getElementById('gaiaPanelBody').innerHTML = `<span style="color:#f44747;">${esc(doc.error)}</span>`;
+        return;
+      }
+
+      const CORE = [
+        ['REF', doc.ref], ['Client REF', doc.client_ref], ['Title', doc.title],
+        ['Revision', doc.rev], ['Rev Purpose', doc.rev_purp], ['Rev Date', doc.rev_date],
+        ['State', doc.state], ['Discipline', doc.disc], ['Project Disc', doc.project_disc],
+        ['OC', doc.oc], ['Unit', doc.unit], ['Doc Type', doc.doc_type],
+        ['Doc Code', doc.doc_code], ['Trans Out Date', doc.trans_out_date], ['Last Date', doc.last_date],
+      ];
+
+      const coreHtml = CORE.map(([k, v]) => v
+        ? `<div class="panel-field" style="gap:4px;margin-bottom:0;">
+            <label style="margin-bottom:1px;">${k}</label>
+            <div style="color:#cccccc;font-size:0.85rem;word-break:break-word;">${esc(v)}</div>
+           </div>`
+        : ''
+      ).join('');
+
+      let allFieldsHtml = '';
+      if (doc.data && typeof doc.data === 'object') {
+        const entries = Object.entries(doc.data).sort(([a],[b]) => a.localeCompare(b));
+        const rows = entries.map(([k, v]) => v
+          ? `<div class="gaia-field-key">${esc(k)}</div><div class="gaia-field-val">${esc(String(v))}</div>`
+          : ''
+        ).join('');
+        allFieldsHtml = `<details class="gaia-all-fields">
+          <summary>Show all ${entries.length} attributes</summary>
+          <div class="gaia-field-grid">${rows}</div>
+        </details>`;
+      }
+
+      _gaiaPanelDoc = doc;
+      if (!alreadyWatched) document.getElementById('gaiaPanelWlBtn').textContent = 'Add to Watchlist';
+      document.getElementById('gaiaPanelFooter').style.display = alreadyWatched ? 'none' : 'flex';
+      document.getElementById('gaiaPanelBody').innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:8px;">${coreHtml}</div>
+        ${allFieldsHtml}`;
+      // Files section — always shown
+      if (doc.ref) loadGaiaPanelFiles(doc.ref);
+      // Watchlist editor — only when opened from watchlist
+      if (alreadyWatched && wlItem) {
+        _gaiaPanelWlItemId = wlItem.id;
+        document.getElementById('gaiaPanelWlPriority').value = wlItem.priority || 'Normal';
+        document.getElementById('gaiaPanelWlNotes').value    = wlItem.notes    || '';
+        document.getElementById('gaiaPanelWlEditStatus').textContent = '';
+        document.getElementById('gaiaPanelWlEdit').style.display = '';
+      }
+    }
+
+    function closeGaiaPanel() {
+      document.getElementById('gaiaPanel').classList.remove('open');
+      document.getElementById('gaiaPanelBackdrop').classList.remove('open');
+    }
+
+    async function addCurrentDocToWatchlist() {
+      if (!_gaiaPanelDoc) return;
+      const btn = document.getElementById('gaiaPanelWlBtn');
+      const st  = document.getElementById('gaiaPanelWlStatus');
+      btn.disabled = true;
+      const res  = await fetch('/api/gaia/watchlist', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ref: _gaiaPanelDoc.ref, client_ref: _gaiaPanelDoc.client_ref,
+                              title: _gaiaPanelDoc.title})
+      });
+      const data = await res.json();
+      btn.disabled = false;
+      if (data.error) {
+        st.style.color = '#f44747'; st.textContent = data.error;
+      } else {
+        st.style.color = '#4ec9b0'; st.textContent = 'Added to watchlist';
+        btn.textContent = '✓ On watchlist';
+      }
+    }
+
+    // ── Watchlist ─────────────────────────────────────────────────────────────
+
+    let _wlItems = [];
+
+    async function loadWatchlist() {
+      const res  = await fetch('/api/gaia/watchlist');
+      const data = await res.json();
+      _wlItems = data.items || [];
+      document.getElementById('wlCount').textContent =
+        `${_wlItems.length} item${_wlItems.length !== 1 ? 's' : ''}`;
+      applyWlFilter();
+    }
+
+    function applyWlFilter() {
+      const prio    = document.getElementById('wlFilterPriority').value;
+      const changed = document.getElementById('wlFilterChanged').checked;
+      let items = _wlItems;
+      if (prio)    items = items.filter(i => i.priority === prio);
+      if (changed) items = items.filter(i => i.delta && i.delta.length > 0);
+      renderWlTable(items);
+    }
+
+    const PRIO_COLOR = {High:'#f44747', Normal:'#cccccc', Low:'#858585'};
+
+    function renderWlTable(items) {
+      // Update sort arrows
+      document.querySelectorAll('[id^="wsarr-"]').forEach(el => {
+        const col = el.id.replace('wsarr-', '');
+        el.className = 'sort-arrow' + (col === _gaiaWlSort.col ? ' active' : '');
+        el.textContent = (col === _gaiaWlSort.col && !_gaiaWlSort.asc) ? '▼' : '▲';
+      });
+      // Update Ack All button
+      const changed = items.filter(i => i.delta && i.delta.length > 0);
+      const ackBtn  = document.getElementById('wlAckAllBtn');
+      document.getElementById('wlAckAllCount').textContent = changed.length;
+      ackBtn.style.display = changed.length > 0 ? '' : 'none';
+
+      const sorted = _gaiaWlSort.col
+        ? _sortArr([...items], _gaiaWlSort.col === 'rev' ? 'current.rev' : _gaiaWlSort.col, _gaiaWlSort.asc)
+        : items;
+
+      if (!sorted.length) {
+        document.getElementById('wlBody').innerHTML =
+          '<tr><td colspan="10" style="color:#555;text-align:center;padding:24px;">No items match the filter.</td></tr>';
+        return;
+      }
+      document.getElementById('wlBody').innerHTML = sorted.map(it => {
+        const cur = it.current || null;
+        const delta = (it.delta || []).map(d => {
+          if (d === 'REV') {
+            const from = it.last_seen_rev || '—', to = (cur||{}).rev || '—';
+            return `<span style="font-size:0.68rem;background:#3a2a00;color:#d7ba7d;border-radius:2px;padding:1px 5px;margin-right:3px;">REV ${esc(from)}→${esc(to)}</span>`;
+          }
+          if (d === 'STATE') {
+            const isRel = ((cur||{}).state||'').toLowerCase().includes('issued');
+            const [bg,fg,lbl] = isRel ? ['#003a2a','#4ec9b0','RELEASED'] : ['#3a2a00','#d7ba7d','STATE'];
+            return `<span style="font-size:0.68rem;background:${bg};color:${fg};border-radius:2px;padding:1px 5px;margin-right:3px;">${lbl}</span>`;
+          }
+          return `<span style="font-size:0.68rem;background:#3a2a00;color:#d7ba7d;border-radius:2px;padding:1px 5px;margin-right:3px;">${esc(d)}</span>`;
+        }).join('');
+        const pColor  = PRIO_COLOR[it.priority] || '#858585';
+        const notFound = !cur ? `<span style="font-size:0.68rem;background:#3a0000;color:#f44747;border-radius:2px;padding:1px 5px;">NOT IN IMPORT</span>` : '';
+        const filesHtml = (it.files||[]).map(f =>
+          `<a class="file-chip" href="/api/gaia/files/${f.id}" target="_blank" onclick="event.stopPropagation()" title="${esc(f.name)}">📄 ${esc(f.name.length > 16 ? f.name.slice(0,14)+'…' : f.name)}</a>`
+        ).join('');
+        return `<tr class="doc-row" onclick="openWlDetail(${it.id})">
+          <td><span style="font-size:0.72rem;color:${pColor};">${esc(it.priority||'')}</span></td>
+          <td><code style="font-size:0.75rem;color:#9cdcfe;">${esc(it.ref||'')}</code></td>
+          <td style="font-size:0.75rem;color:#858585;">${esc((cur&&cur.client_ref)||it.client_ref||'')}</td>
+          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc((cur&&cur.title)||it.title||'')}</td>
+          <td>${esc((cur&&cur.rev)||'—')}</td>
+          <td>${cur ? stateChip(cur.state||'') : notFound}</td>
+          <td style="font-size:0.75rem;color:#555;">${esc((cur&&cur.trans_out_date)||'')}</td>
+          <td style="white-space:nowrap;">${filesHtml}</td>
+          <td>${delta}</td>
+          <td style="white-space:nowrap;">
+            ${it.delta && it.delta.length ? `<button class="spi-load-btn" onclick="event.stopPropagation();ackWatchlist(${it.id},this)" style="color:#4ec9b0;border-color:#1a4a3a;" title="Mark as seen">✓ Ack</button>` : ''}
+            <button class="spi-load-btn" onclick="event.stopPropagation();removeWatchlist(${it.id},this)" style="color:#f44747;border-color:#5a2020;" title="Remove">×</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function openWlDetail(id) {
+      const it = _wlItems.find(i => i.id === id);
+      if (!it) return;
+      const docId = it.current && it.current.id;
+      if (docId) openGaiaDoc(docId, true, it);
+    }
+
+    async function ackWatchlist(id, btn) {
+      btn.disabled = true;
+      const res  = await fetch(`/api/gaia/watchlist/${id}/acknowledge`, {method:'POST'});
+      const data = await res.json();
+      if (data.ok) await loadWatchlist();
+      else { btn.disabled = false; alert('Acknowledge failed'); }
+    }
+
+    async function removeWatchlist(id, btn) {
+      if (!confirm('Remove from watchlist?')) return;
+      btn.disabled = true;
+      const res  = await fetch(`/api/gaia/watchlist/${id}`, {method:'DELETE'});
+      const data = await res.json();
+      if (data.ok) await loadWatchlist();
+      else { btn.disabled = false; alert('Remove failed'); }
+    }
+
+    async function addWatchlistItem() {
+      const ref   = document.getElementById('wlAddRef').value.trim();
+      const cr    = document.getElementById('wlAddClientRef').value.trim();
+      const title = document.getElementById('wlAddTitle').value.trim();
+      const prio  = document.getElementById('wlAddPriority').value;
+      const notes = document.getElementById('wlAddNotes').value.trim();
+      if (!ref && !cr) { setStatus('wlAddStatus','error','Enter a REF or Client REF'); return; }
+      setStatus('wlAddStatus','','<span class="spinner"></span>');
+      const res  = await fetch('/api/gaia/watchlist', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ref: ref||null, client_ref: cr||null, title: title||null,
+                              priority: prio, notes: notes||null})
+      });
+      const data = await res.json();
+      if (data.error) { setStatus('wlAddStatus','error',data.error); return; }
+      setStatus('wlAddStatus','ok','Added');
+      document.getElementById('wlAddRef').value = '';
+      document.getElementById('wlAddClientRef').value = '';
+      document.getElementById('wlAddTitle').value = '';
+      document.getElementById('wlAddNotes').value = '';
+      await loadWatchlist();
+    }
+
+    async function bulkAddWatchlist() {
+      const refs  = document.getElementById('wlBulkRefs').value.trim();
+      const prio  = document.getElementById('wlBulkPriority').value;
+      if (!refs) { setStatus('wlBulkStatus','error','Paste some REFs first'); return; }
+      setStatus('wlBulkStatus','','<span class="spinner"></span>Adding...');
+      const res  = await fetch('/api/gaia/watchlist/bulk', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({refs, priority: prio})
+      });
+      const data = await res.json();
+      if (data.error) { setStatus('wlBulkStatus','error',data.error); return; }
+      setStatus('wlBulkStatus','ok',`Added ${data.added}, skipped ${data.skipped} (already on list)`);
+      document.getElementById('wlBulkRefs').value = '';
+      await loadWatchlist();
+    }
+
+    async function seedWatchlist() {
+      setStatus('wlSeedStatus','','<span class="spinner"></span>Scanning specs folder...');
+      const res  = await fetch('/api/gaia/watchlist/seed', {method:'POST'});
+      const data = await res.json();
+      if (data.error) { setStatus('wlSeedStatus','error',data.error); return; }
+      let msg = `Added ${data.added}, skipped ${data.skipped} already-watched.`;
+      if (data.unmatched > 0) msg += ` ${data.unmatched} spec PDF(s) didn't match any GAIA CLIENT_REF.`;
+      setStatus('wlSeedStatus','ok', msg);
+      await loadWatchlist();
+    }
+
+    function toggleWlPanel(id) {
+      const el = document.getElementById(id);
+      el.style.display = el.style.display === 'none' ? '' : 'none';
+    }
+
+    async function ackAllWatchlist() {
+      const btn = document.getElementById('wlAckAllBtn');
+      btn.disabled = true;
+      const res  = await fetch('/api/gaia/watchlist/acknowledge-all', {method:'POST'});
+      const data = await res.json();
+      btn.disabled = false;
+      if (data.ok) await loadWatchlist();
+    }
+
+    function exportWlCsv() {
+      if (!_wlItems.length) return;
+      const COLS = ['ref','client_ref','title','priority','rev','state','trans_out_date','notes','acknowledged_at'];
+      const header = COLS.join(',');
+      const rows = _wlItems.map(it => {
+        const cur = it.current || {};
+        const vals = {
+          ref: it.ref||'', client_ref: it.client_ref||'',
+          title: it.title||(cur.title)||'', priority: it.priority||'',
+          rev: cur.rev||'', state: cur.state||'',
+          trans_out_date: cur.trans_out_date||'',
+          notes: it.notes||'', acknowledged_at: it.acknowledged_at||''
+        };
+        return COLS.map(c => `"${String(vals[c]||'').replace(/"/g,'""')}"`).join(',');
+      });
+      const csv  = [header, ...rows].join('\r\n');
+      const blob = new Blob([csv], {type:'text/csv'});
+      const a    = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `watchlist_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+    }
+
+    async function linkSpecsToGaia() {
+      setStatus('wlSeedStatus','','<span class="spinner"></span>Linking spec PDFs to register...');
+      document.getElementById('wlSeedPanel').style.display = '';
+      const res  = await fetch('/api/gaia/files/link-specs', {method:'POST'});
+      const data = await res.json();
+      if (data.error) { setStatus('wlSeedStatus','error',data.error); return; }
+      setStatus('wlSeedStatus','ok',`Linked ${data.linked} PDFs, ${data.skipped} already linked, ${data.unmatched} unmatched.`);
+      await loadWatchlist();
+    }
+
+    // ── Watchlist panel inline edit ───────────────────────────────────────────
+
+    let _gaiaPanelWlItemId = null;
+
+    async function saveWlItemFromPanel() {
+      if (!_gaiaPanelWlItemId) return;
+      const priority = document.getElementById('gaiaPanelWlPriority').value;
+      const notes    = document.getElementById('gaiaPanelWlNotes').value.trim();
+      const res  = await fetch(`/api/gaia/watchlist/${_gaiaPanelWlItemId}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({priority, notes: notes||null})
+      });
+      const data = await res.json();
+      const st   = document.getElementById('gaiaPanelWlEditStatus');
+      if (data.ok) {
+        st.textContent = 'Saved'; setTimeout(() => st.textContent = '', 2000);
+        await loadWatchlist();
+      } else { st.style.color='#f44747'; st.textContent = data.error||'Error'; }
+    }
+
+    // ── GAIA doc files ────────────────────────────────────────────────────────
+
+    let _gaiaPanelRef = null;
+
+    async function loadGaiaPanelFiles(ref) {
+      _gaiaPanelRef = ref;
+      const res  = await fetch(`/api/gaia/refs/${encodeURIComponent(ref)}/files`);
+      const data = await res.json();
+      renderGaiaPanelFiles(data.files || []);
+      document.getElementById('gaiaPanelFiles').style.display = '';
+    }
+
+    function renderGaiaPanelFiles(files) {
+      const list = document.getElementById('gaiaPanelFileList');
+      if (!files.length) {
+        list.innerHTML = '<span style="color:#555;font-size:0.78rem;">No documents attached yet.</span>';
+        return;
+      }
+      list.innerHTML = files.map(f =>
+        `<span style="display:inline-flex;align-items:center;gap:4px;">
+           <a class="file-chip" href="/api/gaia/files/${f.id}" target="_blank">📄 ${esc(f.original_name||f.id)}</a>
+           <button class="file-del" onclick="deleteGaiaFile(${f.id})" title="Remove">✕</button>
+         </span>`
+      ).join('');
+    }
+
+    async function uploadGaiaFile(file) {
+      if (!_gaiaPanelRef) return;
+      setStatus('gaiaPanelFileStatus','','<span class="spinner"></span>Uploading...');
+      const fd = new FormData(); fd.append('file', file);
+      const res  = await fetch(`/api/gaia/refs/${encodeURIComponent(_gaiaPanelRef)}/files`, {method:'POST',body:fd});
+      const data = await res.json();
+      if (data.error) { setStatus('gaiaPanelFileStatus','error',data.error); return; }
+      setStatus('gaiaPanelFileStatus','ok',`Uploaded: ${data.name}`);
+      await loadGaiaPanelFiles(_gaiaPanelRef);
+      await loadWatchlist();
+    }
+
+    async function deleteGaiaFile(fileId) {
+      if (!confirm('Remove this file?')) return;
+      await fetch('/api/gaia/files/' + fileId, {method:'DELETE'});
+      await loadGaiaPanelFiles(_gaiaPanelRef);
+      await loadWatchlist();
+    }
+
+    function setupGaiaPanelFileDrop() {
+      const drop  = document.getElementById('gaiaPanelFileDrop');
+      const input = document.getElementById('gaiaPanelFileInput');
+      drop.addEventListener('click', () => input.click());
+      drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+      drop.addEventListener('drop', e => {
+        e.preventDefault(); drop.classList.remove('drag-over');
+        [...e.dataTransfer.files].forEach(f => uploadGaiaFile(f));
+      });
+    }
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function setupGaiaDropZone() {
+      const zone = document.getElementById('gaiaDropZone');
+      zone.addEventListener('click', () => document.getElementById('gaiaFileInput').click());
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) uploadGaia(file);
+      });
+    }
+
+    async function uploadGaia(file) {
+      if (!file.name.toLowerCase().endsWith('.xml')) {
+        setStatus('gaiaUploadStatus', 'error', 'Only .xml files accepted (drop the GAIA Advitium xml, not the xlsm).');
+        return;
+      }
+      setStatus('gaiaUploadStatus', '', '<span class="spinner"></span>Parsing ' + file.name + '...');
+      const fd = new FormData(); fd.append('file', file);
+      try {
+        const res = await fetch('/api/gaia/import', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.error) { setStatus('gaiaUploadStatus', 'error', data.error); return; }
+
+        setStatus('gaiaUploadStatus', 'ok',
+          `Imported ${data.week_label}: ${data.total_docs.toLocaleString()} documents.`);
+
+        const hse = (data.by_disc.find(d => d.disc === 'HSE Design') || {}).count || 0;
+        const summary = document.getElementById('gaiaImportSummary');
+        summary.className = 'spi-import-summary visible';
+        const renderRows = (rows, key) =>
+          rows.slice(0, 10).map(r =>
+            `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.8rem;border-bottom:1px solid #2a2a2a;">
+              <span style="color:#cccccc;">${r[key] || '(blank)'}</span>
+              <span style="color:#858585;">${r.count.toLocaleString()}</span>
+            </div>`).join('');
+        const diff = data.diff;
+        const diffHtml = diff
+          ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid #3c3c3c;">
+               <div style="color:#858585;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">vs Previous Import</div>
+               <div style="display:flex;gap:18px;flex-wrap:wrap;">
+                 <div class="spi-stat"><div class="spi-stat-label">New</div><div class="spi-stat-value ok">+${diff.added}</div></div>
+                 <div class="spi-stat"><div class="spi-stat-label">Removed</div><div class="spi-stat-value" style="color:#f44747;">−${diff.removed}</div></div>
+                 <div class="spi-stat"><div class="spi-stat-label">Changed</div><div class="spi-stat-value warn">~${diff.changed}</div></div>
+               </div>
+               ${diff.added + diff.removed + diff.changed > 0
+                 ? `<button class="spi-load-btn" style="margin-top:10px;" onclick="showGaiaDiff(${data.import_id}, 'gaiaPostImportDiff')">Show full diff</button>
+                    <div id="gaiaPostImportDiff" style="margin-top:8px;"></div>`
+                 : '<div style="color:#555;font-size:0.8rem;margin-top:6px;">No changes detected from previous import.</div>'}
+             </div>`
+          : '<div style="color:#555;font-size:0.78rem;margin-top:10px;">First import — no previous version to compare.</div>';
+
+        summary.innerHTML = `
+          <div class="spi-summary-grid">
+            <div class="spi-stat"><div class="spi-stat-label">Date</div><div class="spi-stat-value ok">${data.week_label}</div></div>
+            <div class="spi-stat"><div class="spi-stat-label">Total Docs</div><div class="spi-stat-value">${data.total_docs.toLocaleString()}</div></div>
+            <div class="spi-stat"><div class="spi-stat-label">HSE Design</div><div class="spi-stat-value warn">${hse.toLocaleString()}</div></div>
+            <div class="spi-stat"><div class="spi-stat-label">Disciplines</div><div class="spi-stat-value">${data.by_disc.length}</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:14px;">
+            <div>
+              <div style="color:#858585;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">By Discipline</div>
+              ${renderRows(data.by_disc, 'disc')}
+            </div>
+            <div>
+              <div style="color:#858585;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">By Operating Center</div>
+              ${renderRows(data.by_oc, 'oc')}
+            </div>
+            <div>
+              <div style="color:#858585;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">By State</div>
+              ${renderRows(data.by_state, 'state')}
+            </div>
+          </div>
+          ${diffHtml}`;
+
+        await loadGaiaHistory();
+      } catch (e) {
+        setStatus('gaiaUploadStatus', 'error', 'Import failed — see log.');
+      }
+    }
+
+    async function loadGaiaHistory() {
+      const res = await fetch('/api/gaia/imports');
+      const data = await res.json();
+      const el = document.getElementById('gaiaHistory');
+      if (!data.imports || !data.imports.length) {
+        el.innerHTML = '<span style="color:#555;font-size:0.85rem;">No imports yet.</span>';
+        return;
+      }
+      el.innerHTML = data.imports.map((imp, idx) => {
+        const dt = imp.imported_at ? imp.imported_at.replace('T',' ').slice(0,16) + ' UTC' : '';
+        const hasPrev = idx < data.imports.length - 1;
+        return `<div>
+          <div class="spi-history-row">
+            <span class="spi-week">${imp.week_label}</span>
+            <span style="color:#cccccc;font-size:0.82rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${imp.filename}</span>
+            <span class="spi-fgs-count">${imp.total_docs.toLocaleString()} docs</span>
+            <span class="spi-date">${dt}</span>
+            <button class="spi-load-btn" onclick="viewGaiaImport(${imp.id})" title="Browse this import">View</button>
+            ${hasPrev ? `<button class="spi-load-btn" onclick="toggleGaiaDiff(${imp.id}, this)" title="Show week-over-week diff">Diff</button>` : ''}
+            <button class="spi-load-btn" onclick="deleteGaiaImport(${imp.id})" style="color:#f44747;border-color:#5a2020;" title="Delete this import and all its docs">×</button>
+          </div>
+          <div id="gaia-diff-${imp.id}" style="display:none;padding:8px 0 12px 0;"></div>
+        </div>`;
+      }).join('');
+    }
+
+    async function deleteGaiaImport(importId) {
+      if (!confirm('Delete this import and all its documents?')) return;
+      const res = await fetch('/api/gaia/imports/' + importId, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.error) { alert('Delete failed: ' + data.error); return; }
+      await loadGaiaHistory();
+    }
+
+    async function showGaiaDiff(importId, targetId) {
+      const el = document.getElementById(targetId);
+      el.innerHTML = '<span style="color:#555;font-size:0.82rem;"><span class="spinner"></span> Loading diff...</span>';
+      const res  = await fetch(`/api/gaia/imports/${importId}/diff`);
+      const data = await res.json();
+      if (data.error) { el.innerHTML = `<span style="color:#f44747;">${esc(data.error)}</span>`; return; }
+      if (!data.diff) { el.innerHTML = `<span style="color:#555;font-size:0.82rem;">${data.message || 'No diff available.'}</span>`; return; }
+      el.innerHTML = renderGaiaDiff(data.diff);
+    }
+
+    async function toggleGaiaDiff(importId, btn) {
+      const el = document.getElementById('gaia-diff-' + importId);
+      if (el.style.display !== 'none') { el.style.display = 'none'; btn.textContent = 'Diff'; return; }
+      el.style.display = '';
+      btn.textContent = 'Hide';
+      if (!el.dataset.loaded) {
+        el.dataset.loaded = '1';
+        await showGaiaDiff(importId, 'gaia-diff-' + importId);
+      }
+    }
+
+    function renderGaiaDiff(diff) {
+      const LABELS = {rev:'Rev', rev_purp:'Rev Purpose', rev_date:'Rev Date',
+                      state:'State', trans_out_date:'Trans Out', title:'Title', client_ref:'Client REF'};
+      const section = (label, items, color, renderFn) => {
+        if (!items.length) return '';
+        return `<details open style="margin-bottom:10px;">
+          <summary style="color:${color};font-size:0.8rem;cursor:pointer;padding:4px 0;">
+            ${label} (${items.length})
+          </summary>
+          <div style="margin-top:6px;font-size:0.78rem;">
+            ${items.map(renderFn).join('')}
+          </div>
+        </details>`;
+      };
+      const rowStyle = 'padding:3px 6px;border-bottom:1px solid #2a2a2a;display:flex;gap:8px;align-items:baseline;';
+      const added = section('New documents', diff.added, '#4ec9b0', d =>
+        `<div style="${rowStyle}"><code style="color:#9cdcfe;flex-shrink:0;">${esc(d.ref)}</code><span style="color:#858585;">${esc(d.disc||'')}</span><span style="color:#cccccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${esc(d.title||'')}</span></div>`);
+      const removed = section('Removed documents', diff.removed, '#f44747', d =>
+        `<div style="${rowStyle}"><code style="color:#9cdcfe;flex-shrink:0;">${esc(d.ref)}</code><span style="color:#858585;">${esc(d.disc||'')}</span><span style="color:#cccccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${esc(d.title||'')}</span></div>`);
+      const changed = section('Changed documents', diff.changed, '#d7ba7d', d => {
+        const fields = Object.entries(d.changes).map(([f, v]) =>
+          `<span style="color:#858585;margin-right:6px;">${LABELS[f]||f}:</span><span style="color:#f44747;text-decoration:line-through;margin-right:3px;">${esc(v.old||'—')}</span><span style="color:#4ec9b0;">${esc(v.new||'—')}</span>`
+        ).join(' &nbsp;·&nbsp; ');
+        return `<div style="${rowStyle};flex-wrap:wrap;"><code style="color:#9cdcfe;flex-shrink:0;">${esc(d.ref)}</code><div style="flex:1;min-width:200px;">${fields}</div></div>`;
+      });
+      return added + removed + changed ||
+        '<span style="color:#555;font-size:0.82rem;">No changes detected.</span>';
+    }
+
+    async function viewGaiaImport(importId) {
+      _gaiaCurrentImportId = importId;
+      _gaiaOptsDone = false;
+      // reset filter dropdowns to defaults
+      document.getElementById('gaiaFilterDisc').value = 'HSE Design';
+      document.getElementById('gaiaFilterOC').value = '';
+      document.getElementById('gaiaFilterState').value = '';
+      document.getElementById('gaiaFilterRevPurp').value = '';
+      document.getElementById('gaiaSearch').value = '';
+      // switch to Register sub-tab
+      const tabs = document.querySelectorAll('#page-register .sub-tab');
+      showGaiaTab('register', tabs[1]);
+      await loadGaiaRegister(importId);
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("debugSearch").addEventListener("input", applyDebugFilter);
       setupSpiDropZone();
       loadSpiHistory();
+      setupGaiaDropZone();
+      loadGaiaHistory();
+      setupGaiaPanelFileDrop();
     });
 
     refreshSpecsQA();

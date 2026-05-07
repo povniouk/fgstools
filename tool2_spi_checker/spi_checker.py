@@ -24,13 +24,26 @@ _COLS = [
 ]
 
 _COL_MAP = {
-    'tag_number': 'Tag_Number', 'tag_type': 'Tag_Type', 'system1': 'System1',
-    'io_type1': 'IO_Type1', 'typical': 'Typical', 'tag_serv': 'Tag_Serv',
-    'area_class': 'Area_Class', 'unit_name': 'Unit_name', 'design_by': 'Design_By',
-    'status': 'Status', 'loop_name': 'Loop_Name', 'plant_area': 'Plant_Area',
-    'instr_type': 'Instr_Type', 'instr_desc': 'Instr_Desc',
-    'area': 'Area', 'cwa': 'CWA', 'ex_type': 'Ex_Type',
-    'signal_type': 'Signal_Type', 'io_type2': 'IO_Type2', 'system2': 'System2',
+    'tag_number':  ('tag_number', 'tag_no'),
+    'tag_type':    ('tag_type',),
+    'system1':     ('system1',),
+    'io_type1':    ('io_type1',),
+    'typical':     ('typical',),
+    'tag_serv':    ('tag_serv',),
+    'area_class':  ('area_class',),
+    'unit_name':   ('unit_name',),
+    'design_by':   ('design_by',),
+    'status':      ('status',),
+    'loop_name':   ('loop_name',),
+    'plant_area':  ('plant_area',),
+    'instr_type':  ('instr_type', 'inst_type'),
+    'instr_desc':  ('instr_desc', 'inst_desc'),
+    'area':        ('area',),
+    'cwa':         ('cwa',),
+    'ex_type':     ('ex_type',),
+    'signal_type': ('signal_type',),
+    'io_type2':    ('io_type2',),
+    'system2':     ('system2',),
 }
 
 
@@ -123,7 +136,14 @@ def parse_spi_excel(filepath):
     if not headers:
         return [], 0
 
-    h = {str(v): i for i, v in enumerate(headers) if v is not None}
+    # Case-insensitive header lookup, tolerant of W18 CamelCase and W19 lowercase variants
+    h_lc = {str(v).strip().lower(): i for i, v in enumerate(headers) if v is not None}
+    col_idx = {}
+    for col, aliases in _COL_MAP.items():
+        for alias in aliases:
+            if alias in h_lc:
+                col_idx[col] = h_lc[alias]
+                break
 
     tags = []
     total = 0
@@ -132,14 +152,14 @@ def parse_spi_excel(filepath):
             continue
         total += 1
 
-        sys1 = _val(row, h.get('System1'))
-        sys2 = _val(row, h.get('System2'))
+        sys1 = _val(row, col_idx.get('system1'))
+        sys2 = _val(row, col_idx.get('system2'))
         fgs_via_sys2 = sys1 not in FGS_SYSTEMS and sys2 in FGS_SYSTEMS
 
         if sys1 not in FGS_SYSTEMS and not fgs_via_sys2:
             continue
 
-        tag = {col: _val(row, h.get(_COL_MAP[col])) for col in _COL_MAP}
+        tag = {col: _val(row, col_idx.get(col)) for col in _COL_MAP}
         tag['fgs_via_system2'] = 1 if fgs_via_sys2 else 0
 
         if tag['tag_number']:

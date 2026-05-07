@@ -66,6 +66,15 @@ SPI exports are currently incomplete — data from HSED HOC and HSED BoOC is not
 - Scale: ~2500+ F&G I/O tags in scope
 - Key columns: Tag Number, Loop Number, Software Typical, Service Description, Fire Zone, FGS Layout, Detector Type, System1 (FGS), IO Type 1 (Input/Output)
 
+### GAIA Document Register Export
+- GAIA front-end is branded; the underlying system is **Lascom Advitium** (French PLM)
+- Two files emerge from the manual scrape: `*.xml` (raw Advitium dump) and `*.xlsm` (template that wraps the xml via an Excel XML Map)
+- The xlsm macro just imports the xml on open (`Workbook_Open` → `XmlImport` → `Table1`); no business logic — **parse the xml directly** and ignore the xlsm
+- Scale: ~3,986 docs in W2026-05-06 export; 235 attributes per document — full set always populated
+- Key attributes: REF (internal), CLIENT_REF, TITLE, REV, REV_PURP, REV_DATE, STATE, DISC, PROJECT_DISC, OC (HOC/BoOC/POC), UNIT, DOC_TYPE, DOC_CODE, TRANS_OUT_DATE, last_date
+- F&G subset filters via `DISC = "HSE Design"` (265 docs in W2026-05-06)
+- No release notifications from GAIA — the whole point of Tool 8 is to detect new revisions of docs the user cares about
+
 ---
 
 ## Target Architecture — Integrated Dashboard
@@ -81,6 +90,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 | Email Tracker | Next to build | Deliverable tracking from forwarded emails |
 | SPI Checker | Planned (Tool 2) | Waiting for complete SPI data |
 | C&E Checker | Planned (Tool 3) | Waiting for first C&E draft |
+| Doc Register | In progress (Tool 8) | Weekly GAIA xml import + watchlist |
 
 **Operational requirements (non-negotiable):**
 - App must run as a **systemd service** — starts on boot, restarts on crash, no terminal needed for day-to-day operation
@@ -232,6 +242,8 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Key columns: Tag_Number, System1, IO_Type1, Typical, Tag_Serv, Area_Class, Unit_name, Design_By, Status
 - No Fire Zone or FGS Layout column in current export — deferred to M5
 
+**Header naming differs between weekly exports:** W18 used CamelCase (`System1`, `Tag_Number`, `Instr_Type`); W19 switched to lowercase (`system1`, `tag_no`, `inst_type`). Parser does **case-insensitive header matching with alias lists** (`_COL_MAP` is `{canonical: (alias1, alias2, ...)}`) — when a new export breaks parsing, add the new header name as an alias rather than renaming.
+
 **Input:** Weekly SPI Excel export (.xlsx), drag-drop in browser
 **Stack:** `spi_checker.py` Flask Blueprint, SQLite (`spi_imports`, `spi_tags` tables), openpyxl
 
@@ -296,8 +308,63 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 ---
 
+### Tool 8 — Document Submittal Register — IN PROGRESS
+
+**Purpose:** Replace manual GAIA monitoring. Weekly xml dump → full register stored in SQLite → diff vs prior week → notify on changes to documents on a user-managed watchlist. Full register (~3,986 docs) is browseable for information; the watchlist surfaces only docs the user actively works on.
+
+**Ingestion:** User scrapes GAIA manually (no API; SSO-only system; admins on holiday — investigation continues), exports Advitium xml, drag-drops into browser. The companion `.xlsm` is just an Excel XML-Map viewer with no business logic — ignore it and parse the xml directly.
+
+**Stack:** `tool8_doc_register/` Flask Blueprint, SQLite (`gaia_imports`, `gaia_docs`, `gaia_doc_history`, `gaia_watchlist`), `xml.etree.ElementTree` for streaming parse (~0.4s for 3,986 docs).
+
+**Match keys:** REF (internal Advitium key, e.g. `078051C-A00-PDS-1547-0001`) and CLIENT_REF (e.g. `CWLNG-TEN-A00-PRO-PDS-00001`). Both indexed; watchlist accepts either.
+
+**F&G subset:** `DISC = "HSE Design"` (265 docs in W2026-05-06 export — much smaller than the full 3,986).
+
+---
+
+#### Tool 8 — Milestone Plan
+
+**M1 — XML import + storage** ← IN PROGRESS
+- Drag-drop `.xml` upload on Doc Register tab
+- Streaming parse with ElementTree; persist all 235 attributes per doc as JSON, plus 15 indexed core columns (REF, CLIENT_REF, TITLE, REV, REV_PURP, REV_DATE, STATE, DISC, OC, etc.)
+- SQLite tables: `gaia_imports`, `gaia_docs`
+- Import summary: total docs, breakdown by DISC / OC / STATE
+- Import history list
+
+**M2 — Register view**
+- Filterable table: DISC, OC, STATE, REV_PURP, DOC_TYPE
+- Search by REF / CLIENT_REF / TITLE
+- Default filter: HSE Design (your F&G scope) — toggle to show all
+- Click row → detail panel with sensible field subset; "Show all 235 fields" expander
+
+**M3 — Week-over-week diff**
+- On import, compare against previous import (mirrors Tool 2 M4 pattern)
+- New docs, removed docs, REV/STATE/REV_PURP/TRANS_OUT_DATE changes
+- Delta report shown after import; accessible from history
+- `gaia_doc_history` table records every change (audit trail)
+
+**M4 — Watchlist**
+- New tab/sub-tab "Watchlist"; new table `gaia_watchlist (ref, client_ref, title, priority, notes, added_via, added_date)`
+- Three population paths:
+  1. **Bulk import** — paste list of REFs/CLIENT_REFs, or upload .csv/.xlsx
+  2. **Manual add/edit/remove** — form
+  3. **Auto-seed** from `~/spec-qa/specs/` filenames (one-time + re-run button)
+- Watchlist view: REF | CLIENT_REF | TITLE | Current REV | STATE | Last release | Δ since last viewed
+- "Mark seen" / "Acknowledge" per row
+
+**M5 — Notification feed**
+- Overview widget: "N watchlist documents updated this week"
+- Watchlist row badges: 🆕 NEW REV / STATE CHANGED / RELEASED
+- In-app only; email/browser push deferred
+
+**M6 — Tool 4 trigger hook (structural)**
+- When a watchlisted spec gets a new REV, log a "ready for revision delta" event
+- If the new PDF is already in `~/spec-qa/specs/`, run Tool 4 immediately
+- Tool 4 itself is built separately; M6 just wires the hook so adding it later is drop-in
+
+---
+
 ### Additional tools considered (brainstorm, not yet scoped)
-- **Document submittal register (Tool 8 candidate)** — replaces manual GAIA monitoring; import GAIA Excel export, diff against previous import, surface new revisions and status changes (the notification GAIA doesn't send); each document has TEN ref + client ref, revisions A/B/C→00/01/02, statuses IFI/IFR/IFC/IFA/IFD etc.; new spec revision detected → trigger Tool 4 (revision delta); ingestion: periodic Excel export (SSO-only, no API)
 - **Meeting minutes action extractor** — paste or forward meeting minutes, AI extracts action items with owners and deadlines
 - **Overview / KPI dashboard** — open actions count, pending reviews, last SPI import, spec revision alerts
 - **Detector type cards (Tool 6 candidate)** — one card per F&G detector type (IR point gas, catalytic bead, open path, UV/IR flame, heat, smoke, MCP, etc.); each card shows governing spec clause(s), typical application, voting logic, test/maintenance interval; auto-populated via RAG on first build then cached; SPI tag counts + fire zones added as second phase once SPI data is complete
@@ -389,6 +456,8 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] `email_tracker.py` → `tool5_email_tracker/` package (code in `__init__.py` to preserve `_log`/`_current_model` shared-reference semantics)
 - [x] Tool 2 M2 — Loop register: `/api/spi/loops`, collapsible loop rows, inline tag sub-rows, loop-level warnings (missing typical, inconsistent typical, missing area class), Warnings-only filter; "View" in history goes to loop register
 - [x] Tool 5 M1–M7 — Email Tracker complete: import, action register, contacts, side panel, notes log, attachments, email memory RAG
+- [x] SPI parser: case-insensitive headers + alias lists (W19 lowercase headers + `Tag_Number`→`tag_no` rename broke W18 → W19 diff; verified 347 F&G tags found in both)
 - [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
 - [ ] Tool 4 (Revision Delta Tracker) — not started
+- [ ] Tool 8 (Document Submittal Register) — M1 in progress (xml import + storage); xlsm intentionally ignored

@@ -29,6 +29,12 @@ ssh "$LXC" "mkdir -p $DEST/tool5_email_tracker"
 scp "$REPO/tool5_email_tracker/__init__.py" \
     "$LXC:$DEST/tool5_email_tracker/"
 
+echo "[deploy] Copying tool8_doc_register..."
+ssh "$LXC" "mkdir -p $DEST/tool8_doc_register"
+scp "$REPO/tool8_doc_register/__init__.py" \
+    "$REPO/tool8_doc_register/doc_register.py" \
+    "$LXC:$DEST/tool8_doc_register/"
+
 echo "[deploy] Cleaning up legacy files..."
 ssh "$LXC" "rm -f $DEST/email_tracker.py $DEST/index.html"
 

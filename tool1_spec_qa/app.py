@@ -30,6 +30,9 @@ _email_tracker._current_model = current_model  # share live model reference
 import tool2_spi_checker as _spi_checker
 app.register_blueprint(_spi_checker.bp)
 
+import tool8_doc_register as _doc_register
+app.register_blueprint(_doc_register.bp)
+
 # Log buffer — keeps last 200 entries, streams to connected clients
 _log_buffer = deque(maxlen=200)
 _log_subscribers = []
@@ -507,9 +510,11 @@ if __name__ == "__main__":
     _retriever._log = log_info
     _email_tracker._log = log_info
     _spi_checker._log = log_info
+    _doc_register.doc_register._log = log_info
     log_info(f"Starting F&G Spec Q&A — Ollama: {OLLAMA_URL} — Model: {MODEL}")
     _email_tracker.init_db()
     _spi_checker.init_db()
+    _doc_register.init_db()
     preload_specs()
     log_info("App ready.")
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
