@@ -571,6 +571,58 @@ def _init_spec_revisions():
     db.close()
 
 
+@app.route("/api/digest/weekly", methods=["GET"])
+def weekly_digest():
+    db = _spec_db()
+    today    = datetime.date.today().isoformat()
+    week_end = (datetime.date.today() + datetime.timedelta(days=7)).isoformat()
+
+    # Overdue: open/in-progress items with deadline before today
+    overdue = [dict(r) for r in db.execute(
+        "SELECT id, action, discipline, scope, priority, deadline, status, blocking_point "
+        "FROM action_items WHERE status != 'Closed' AND deadline IS NOT NULL AND deadline != '' AND deadline < ? "
+        "ORDER BY deadline",
+        (today,)
+    ).fetchall()]
+
+    # Due this week (today → +7 days)
+    due_week = [dict(r) for r in db.execute(
+        "SELECT id, action, discipline, scope, priority, deadline, status, blocking_point "
+        "FROM action_items WHERE status != 'Closed' AND deadline IS NOT NULL AND deadline != '' "
+        "AND deadline >= ? AND deadline <= ? ORDER BY deadline",
+        (today, week_end)
+    ).fetchall()]
+
+    # Latest SPI diff summary
+    spi_diff = None
+    try:
+        row = db.execute(
+            "SELECT sd.new_count, sd.removed_count, sd.changed_count, "
+            "si.week_label, sd.diff_json "
+            "FROM spi_diffs sd JOIN spi_imports si ON sd.import_id = si.id "
+            "ORDER BY sd.import_id DESC LIMIT 1"
+        ).fetchone()
+        if row:
+            diff_data = json.loads(row['diff_json']) if row['diff_json'] else {}
+            spi_diff = {
+                'week_label':     row['week_label'],
+                'new_count':      row['new_count'],
+                'removed_count':  row['removed_count'],
+                'changed_count':  row['changed_count'],
+                'new_tags':       (diff_data.get('new') or [])[:10],
+            }
+    except Exception:
+        pass
+
+    db.close()
+    return jsonify({
+        'as_of':      today,
+        'overdue':    overdue,
+        'due_week':   due_week,
+        'spi_diff':   spi_diff,
+    })
+
+
 @app.route("/api/specs/revisions", methods=["GET"])
 def list_spec_revisions():
     db = _spec_db()

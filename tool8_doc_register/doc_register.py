@@ -274,6 +274,17 @@ def init_db():
             uploaded_at   TEXT,
             source        TEXT DEFAULT 'upload'
         );
+        CREATE TABLE IF NOT EXISTS doc_comments (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref         TEXT NOT NULL,
+            client_ref  TEXT,
+            rev         TEXT,
+            reviewer    TEXT DEFAULT '',
+            comment     TEXT NOT NULL,
+            status      TEXT DEFAULT 'Open',
+            created_at  TEXT,
+            updated_at  TEXT
+        );
     """)
     _run_migration(db, 'gaia_unique_week_label',   _mig_gaia_unique_week)
     _run_migration(db, 'gaia_unique_docs_in_import', _mig_gaia_unique_docs)
@@ -289,6 +300,7 @@ def init_db():
         CREATE INDEX        IF NOT EXISTS idx_gaia_hist_import     ON gaia_doc_history(import_id);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_gaia_wl_ref          ON gaia_watchlist(ref) WHERE ref IS NOT NULL;
         CREATE INDEX        IF NOT EXISTS idx_gaia_files_ref       ON gaia_doc_files(ref);
+        CREATE INDEX        IF NOT EXISTS idx_doc_comments_ref     ON doc_comments(ref);
     """)
     db.commit()
     db.close()
@@ -995,3 +1007,113 @@ def link_specs_to_docs():
     db.commit(); db.close()
     _log(f"[GAIA] Link specs: {linked} linked, {skipped} already linked, {unmatched} unmatched")
     return jsonify({'ok': True, 'linked': linked, 'skipped': skipped, 'unmatched': unmatched})
+
+
+# ── Related action items ──────────────────────────────────────────────────────
+
+@bp.route('/api/gaia/refs/<path:ref>/related', methods=['GET'])
+def get_related_actions(ref):
+    """Return action_items whose document_ref matches this REF or CLIENT_REF."""
+    db = get_db()
+    # Look up client_ref for this ref from latest import
+    imp_id = _latest_import_id(db)
+    client_ref = None
+    if imp_id:
+        row = db.execute(
+            "SELECT client_ref FROM gaia_docs WHERE import_id=? AND ref=? LIMIT 1",
+            (imp_id, ref)
+        ).fetchone()
+        if row:
+            client_ref = row['client_ref']
+
+    params = [ref]
+    q = "SELECT id, action, discipline, scope, priority, deadline, status, blocking_point FROM action_items WHERE document_ref=?"
+    if client_ref:
+        q += " OR document_ref=?"
+        params.append(client_ref)
+    q += " ORDER BY CASE status WHEN 'Open' THEN 0 WHEN 'In Progress' THEN 1 ELSE 2 END, deadline"
+    rows = db.execute(q, params).fetchall()
+    db.close()
+    return jsonify({'items': [dict(r) for r in rows], 'ref': ref, 'client_ref': client_ref})
+
+
+# ── Document review comments ──────────────────────────────────────────────────
+
+_COMMENT_STATUS = {'Open', 'Responded', 'Accepted', 'Rejected'}
+
+
+@bp.route('/api/gaia/refs/<path:ref>/comments', methods=['GET'])
+def get_doc_comments(ref):
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM doc_comments WHERE ref=? ORDER BY id DESC", (ref,)
+    ).fetchall()
+    db.close()
+    return jsonify({'comments': [dict(r) for r in rows]})
+
+
+@bp.route('/api/gaia/refs/<path:ref>/comments', methods=['POST'])
+def add_doc_comment(ref):
+    body = request.get_json(force=True)
+    comment = (body.get('comment') or '').strip()
+    if not comment:
+        return jsonify({'error': 'comment is required'}), 400
+    reviewer   = (body.get('reviewer') or '').strip()
+    rev        = (body.get('rev') or '').strip() or None
+    status     = body.get('status', 'Open')
+    if status not in _COMMENT_STATUS:
+        status = 'Open'
+    now = datetime.datetime.utcnow().isoformat()
+    db = get_db()
+    # Resolve client_ref from latest import
+    imp_id = _latest_import_id(db)
+    client_ref = None
+    if imp_id:
+        row = db.execute(
+            "SELECT client_ref FROM gaia_docs WHERE import_id=? AND ref=? LIMIT 1",
+            (imp_id, ref)
+        ).fetchone()
+        if row:
+            client_ref = row['client_ref']
+    cur = db.execute(
+        "INSERT INTO doc_comments (ref, client_ref, rev, reviewer, comment, status, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (ref, client_ref, rev, reviewer, comment, status, now, now)
+    )
+    db.commit()
+    cid = cur.lastrowid
+    row = dict(db.execute("SELECT * FROM doc_comments WHERE id=?", (cid,)).fetchone())
+    db.close()
+    return jsonify({'ok': True, 'comment': row})
+
+
+@bp.route('/api/gaia/comments/<int:cid>', methods=['PATCH'])
+def update_doc_comment(cid):
+    body = request.get_json(force=True)
+    allowed = {'comment', 'reviewer', 'status', 'rev'}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if 'status' in updates and updates['status'] not in _COMMENT_STATUS:
+        return jsonify({'error': f"status must be one of {sorted(_COMMENT_STATUS)}"}), 400
+    if not updates:
+        return jsonify({'error': 'Nothing to update'}), 400
+    updates['updated_at'] = datetime.datetime.utcnow().isoformat()
+    db = get_db()
+    if not db.execute("SELECT id FROM doc_comments WHERE id=?", (cid,)).fetchone():
+        db.close(); return jsonify({'error': 'Not found'}), 404
+    set_clause = ', '.join(f"{k}=?" for k in updates)
+    db.execute(f"UPDATE doc_comments SET {set_clause} WHERE id=?",
+               list(updates.values()) + [cid])
+    db.commit()
+    row = dict(db.execute("SELECT * FROM doc_comments WHERE id=?", (cid,)).fetchone())
+    db.close()
+    return jsonify({'ok': True, 'comment': row})
+
+
+@bp.route('/api/gaia/comments/<int:cid>', methods=['DELETE'])
+def delete_doc_comment(cid):
+    db = get_db()
+    if not db.execute("SELECT id FROM doc_comments WHERE id=?", (cid,)).fetchone():
+        db.close(); return jsonify({'error': 'Not found'}), 404
+    db.execute("DELETE FROM doc_comments WHERE id=?", (cid,))
+    db.commit(); db.close()
+    return jsonify({'ok': True})

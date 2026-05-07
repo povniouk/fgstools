@@ -394,6 +394,15 @@
         <div id="overviewAlertsList"></div>
       </div>
 
+      <!-- Weekly digest -->
+      <div class="section" id="overviewDigest" style="display:none;">
+        <div class="section-header">
+          <h2>Weekly Digest</h2>
+          <button class="spi-load-btn" onclick="loadWeeklyDigest()">Refresh</button>
+        </div>
+        <div id="overviewDigestBody"></div>
+      </div>
+
       <div class="section" id="overviewStatus">
         <h2>Status</h2>
         <p style="color:#555;font-size:0.85rem;padding:8px 0;">Dashboard is operational.</p>
@@ -1336,6 +1345,9 @@
           changed.length === 0 ? "All acknowledged" : `${changed.length} doc${changed.length !== 1 ? "s" : ""} changed`;
         renderOverviewAlerts(changed);
       } catch {}
+
+      // Weekly digest
+      loadWeeklyDigest();
     }
 
     function renderOverviewAlerts(items) {
@@ -1369,6 +1381,68 @@
       }).join("");
       if (items.length > 20) {
         list.innerHTML += `<div style="color:#555;font-size:0.78rem;padding:6px 0;">… and ${items.length - 20} more</div>`;
+      }
+    }
+
+    async function loadWeeklyDigest() {
+      const section = document.getElementById("overviewDigest");
+      const body    = document.getElementById("overviewDigestBody");
+      try {
+        const d = await (await fetch("/api/digest/weekly")).json();
+        const parts = [];
+
+        if (d.overdue && d.overdue.length > 0) {
+          const rows = d.overdue.map(it => {
+            const days = Math.round((new Date() - new Date(it.deadline)) / 86400000);
+            return `<div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid #2a2a2a;flex-wrap:wrap;">
+              <span style="font-size:0.72rem;background:#3a0000;color:#f44747;border-radius:2px;padding:1px 6px;flex-shrink:0;">${days}d overdue</span>
+              <span style="color:#cccccc;font-size:0.82rem;flex:1;min-width:120px;">${esc(it.action)}</span>
+              <span style="font-size:0.75rem;color:#858585;flex-shrink:0;">${esc(it.discipline||'')}${it.blocking_point ? ' 🔴' : ''}</span>
+            </div>`;
+          }).join('');
+          parts.push(`<div style="margin-bottom:14px;">
+            <div style="font-size:0.8rem;font-weight:600;color:#f44747;margin-bottom:6px;">Overdue (${d.overdue.length})</div>
+            ${rows}
+          </div>`);
+        }
+
+        if (d.due_week && d.due_week.length > 0) {
+          const rows = d.due_week.map(it =>
+            `<div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid #2a2a2a;flex-wrap:wrap;">
+              <code style="font-size:0.72rem;color:#d7ba7d;flex-shrink:0;">${esc(it.deadline)}</code>
+              <span style="color:#cccccc;font-size:0.82rem;flex:1;min-width:120px;">${esc(it.action)}</span>
+              <span style="font-size:0.75rem;color:#858585;flex-shrink:0;">${esc(it.discipline||'')}${it.blocking_point ? ' 🔴' : ''}</span>
+            </div>`
+          ).join('');
+          parts.push(`<div style="margin-bottom:14px;">
+            <div style="font-size:0.8rem;font-weight:600;color:#d7ba7d;margin-bottom:6px;">Due this week (${d.due_week.length})</div>
+            ${rows}
+          </div>`);
+        }
+
+        if (d.spi_diff) {
+          const sd = d.spi_diff;
+          const newTags = (sd.new_tags || []).slice(0, 5).map(t =>
+            `<code style="font-size:0.72rem;color:#9cdcfe;">${esc(t.tag_number||'')}</code>`
+          ).join(' ');
+          parts.push(`<div style="margin-bottom:14px;">
+            <div style="font-size:0.8rem;font-weight:600;color:#4ec9b0;margin-bottom:6px;">SPI — ${esc(sd.week_label)}</div>
+            <div style="font-size:0.82rem;color:#cccccc;">
+              +${sd.new_count} new &nbsp; -${sd.removed_count} removed &nbsp; ~${sd.changed_count} changed
+              ${newTags ? `<div style="margin-top:4px;color:#858585;">New: ${newTags}${sd.new_count > 5 ? ` … and ${sd.new_count - 5} more` : ''}</div>` : ''}
+            </div>
+          </div>`);
+        }
+
+        if (!parts.length) {
+          parts.push(`<div style="color:#555;font-size:0.82rem;padding:6px 0;">No overdue or upcoming actions, no SPI diff.</div>`);
+        }
+
+        body.innerHTML = parts.join('');
+        section.style.display = '';
+      } catch(e) {
+        body.innerHTML = `<span style="color:#555;font-size:0.82rem;">Could not load digest.</span>`;
+        section.style.display = '';
       }
     }
 
@@ -3106,6 +3180,11 @@
         ${allFieldsHtml}`;
       // Files section — always shown
       if (doc.ref) loadGaiaPanelFiles(doc.ref);
+      // Related actions + review comments
+      if (doc.ref) {
+        loadGaiaRelated(doc.ref);
+        loadGaiaComments(doc.ref);
+      }
       // Watchlist editor — only when opened from watchlist
       if (alreadyWatched && wlItem) {
         _gaiaPanelWlItemId = wlItem.id;
@@ -3420,6 +3499,128 @@
         e.preventDefault(); drop.classList.remove('drag-over');
         [...e.dataTransfer.files].forEach(f => uploadGaiaFile(f));
       });
+    }
+
+    // ── Related action items ──────────────────────────────────────────────────
+
+    async function loadGaiaRelated(ref) {
+      const body = document.getElementById('gaiaPanelBody');
+      let section = document.getElementById('gaia-related-section');
+      if (!section) {
+        section = document.createElement('div');
+        section.id = 'gaia-related-section';
+        section.style.cssText = 'margin-top:14px;border-top:1px solid #3c3c3c;padding-top:10px;';
+        body.appendChild(section);
+      }
+      section.innerHTML = '<div style="color:#555;font-size:0.78rem;"><span class="spinner"></span> Loading related actions…</div>';
+      try {
+        const d = await (await fetch(`/api/gaia/refs/${encodeURIComponent(ref)}/related`)).json();
+        const items = d.items || [];
+        if (!items.length) {
+          section.innerHTML = '<div style="font-size:0.78rem;color:#555;">No linked action items.</div>';
+          return;
+        }
+        const _STATUS_COLOR = {Open:'#f44747','In Progress':'#d7ba7d',Closed:'#4ec9b0'};
+        const rows = items.map(it => {
+          const sc = _STATUS_COLOR[it.status] || '#858585';
+          return `<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid #2a2a2a;flex-wrap:wrap;">
+            <span style="font-size:0.7rem;background:#2d2d2d;color:${sc};border:1px solid ${sc};border-radius:2px;padding:0 5px;flex-shrink:0;">${esc(it.status)}</span>
+            <span style="flex:1;color:#cccccc;font-size:0.82rem;min-width:100px;">${esc(it.action)}</span>
+            <span style="font-size:0.72rem;color:#858585;flex-shrink:0;">${esc(it.discipline||'')}${it.deadline ? ' · '+esc(it.deadline) : ''}${it.blocking_point ? ' 🔴' : ''}</span>
+          </div>`;
+        }).join('');
+        section.innerHTML = `<div style="font-size:0.8rem;font-weight:600;color:#9cdcfe;margin-bottom:6px;">Related Actions (${items.length})</div>${rows}`;
+      } catch {
+        section.innerHTML = '<div style="font-size:0.78rem;color:#555;">Could not load related actions.</div>';
+      }
+    }
+
+    // ── Document review comments ──────────────────────────────────────────────
+
+    async function loadGaiaComments(ref) {
+      const body = document.getElementById('gaiaPanelBody');
+      let section = document.getElementById('gaia-comments-section');
+      if (!section) {
+        section = document.createElement('div');
+        section.id = 'gaia-comments-section';
+        section.style.cssText = 'margin-top:14px;border-top:1px solid #3c3c3c;padding-top:10px;';
+        body.appendChild(section);
+      }
+      section.innerHTML = '<div style="color:#555;font-size:0.78rem;"><span class="spinner"></span> Loading comments…</div>';
+      try {
+        const d = await (await fetch(`/api/gaia/refs/${encodeURIComponent(ref)}/comments`)).json();
+        renderGaiaComments(section, ref, d.comments || []);
+      } catch {
+        section.innerHTML = '<div style="font-size:0.78rem;color:#555;">Could not load comments.</div>';
+      }
+    }
+
+    function renderGaiaComments(section, ref, comments) {
+      const _STATUS_BG = {Open:'#3a2a00',Responded:'#002a3a',Accepted:'#002a1a',Rejected:'#2a0000'};
+      const _STATUS_FG = {Open:'#d7ba7d',Responded:'#9cdcfe',Accepted:'#4ec9b0',Rejected:'#f44747'};
+      const rows = comments.map(c => {
+        const bg = _STATUS_BG[c.status]||'#2d2d2d', fg = _STATUS_FG[c.status]||'#858585';
+        return `<div style="padding:6px 0;border-bottom:1px solid #2a2a2a;">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:3px;">
+            <span style="font-size:0.7rem;background:${bg};color:${fg};border-radius:2px;padding:1px 6px;">${esc(c.status)}</span>
+            ${c.reviewer ? `<span style="font-size:0.72rem;color:#858585;">${esc(c.reviewer)}</span>` : ''}
+            ${c.rev ? `<span style="font-size:0.72rem;color:#555;">Rev ${esc(c.rev)}</span>` : ''}
+            <span style="font-size:0.7rem;color:#444;margin-left:auto;">${esc((c.created_at||'').slice(0,10))}</span>
+            <select onchange="updateGaiaComment(${c.id},'${esc(ref)}',{status:this.value})" style="font-size:0.72rem;background:#2d2d2d;border:1px solid #3c3c3c;color:#cccccc;border-radius:2px;padding:1px 4px;">
+              ${['Open','Responded','Accepted','Rejected'].map(s=>`<option value="${s}"${s===c.status?' selected':''}>${s}</option>`).join('')}
+            </select>
+            <button class="file-del" onclick="deleteGaiaComment(${c.id},'${esc(ref)}')" title="Delete">✕</button>
+          </div>
+          <div style="color:#cccccc;font-size:0.82rem;white-space:pre-wrap;">${esc(c.comment)}</div>
+        </div>`;
+      }).join('');
+
+      section.innerHTML = `
+        <div style="font-size:0.8rem;font-weight:600;color:#9cdcfe;margin-bottom:8px;">Review Comments (${comments.length})</div>
+        ${rows || '<div style="font-size:0.78rem;color:#555;margin-bottom:8px;">No comments yet.</div>'}
+        <div style="margin-top:8px;">
+          <textarea id="gaiaCommentInput" rows="2" placeholder="Add a review comment…"
+            style="width:100%;background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:6px 8px;color:#cccccc;font-size:0.82rem;box-sizing:border-box;resize:vertical;"></textarea>
+          <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">
+            <input id="gaiaCommentReviewer" type="text" placeholder="Reviewer (optional)"
+              style="flex:1;min-width:90px;background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:4px 8px;color:#cccccc;font-size:0.8rem;">
+            <input id="gaiaCommentRev" type="text" placeholder="Rev (optional)"
+              style="width:60px;background:#2d2d2d;border:1px solid #3c3c3c;border-radius:2px;padding:4px 8px;color:#cccccc;font-size:0.8rem;">
+            <button class="spi-load-btn" onclick="submitGaiaComment('${esc(ref)}')">Add</button>
+          </div>
+          <div id="gaiaCommentStatus" style="font-size:0.78rem;margin-top:4px;"></div>
+        </div>`;
+    }
+
+    async function submitGaiaComment(ref) {
+      const text = (document.getElementById('gaiaCommentInput')||{}).value||'';
+      if (!text.trim()) return;
+      const reviewer = (document.getElementById('gaiaCommentReviewer')||{}).value||'';
+      const rev      = (document.getElementById('gaiaCommentRev')||{}).value||'';
+      const st = document.getElementById('gaiaCommentStatus');
+      st.textContent = '';
+      const res = await fetch(`/api/gaia/refs/${encodeURIComponent(ref)}/comments`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({comment: text.trim(), reviewer: reviewer.trim(), rev: rev.trim()})
+      });
+      const data = await res.json();
+      if (data.error) { st.style.color='#f44747'; st.textContent=data.error; return; }
+      await loadGaiaComments(ref);
+    }
+
+    async function updateGaiaComment(cid, ref, changes) {
+      const res = await fetch(`/api/gaia/comments/${cid}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(changes)
+      });
+      const data = await res.json();
+      if (!data.error) await loadGaiaComments(ref);
+    }
+
+    async function deleteGaiaComment(cid, ref) {
+      if (!confirm('Delete this comment?')) return;
+      await fetch(`/api/gaia/comments/${cid}`, {method:'DELETE'});
+      await loadGaiaComments(ref);
     }
 
     function esc(s) {
