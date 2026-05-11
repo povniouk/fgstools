@@ -15,12 +15,37 @@ _log = print
 
 FGS_SYSTEMS = {'FGS', 'LFGS'}
 
+# ── Single source of truth for all flags / warnings ───────────────────────────
+# Tag-level flags: key → display label. Add/remove here; frontend loads via
+# /api/spi/flag-config and never has its own hardcoded list.
+TAG_FLAGS = {
+    'missing_typical':    'No Typical',
+    'via_system2':        'via Sys2',
+    'duplicate_tag':      'Duplicate',
+    'interface_io_error': 'IO Mismatch',
+}
+
+# Loop-level warnings: key → display label. Subset of TAG_FLAGS keys plus
+# loop-specific checks (inconsistent_typical). No other warnings are computed.
+LOOP_WARNINGS = {
+    'missing_typical':      'No Typical',
+    'inconsistent_typical': 'Inconsistent Typical',
+}
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Valid IO type pairs for cross-system interfaces (one output, one input, same signal type)
+_COMPLEMENTARY_IO = frozenset([
+    ('DI', 'DO'), ('DO', 'DI'),
+    ('AI', 'AO'), ('AO', 'AI'),
+])
+
 _COLS = [
-    'tag_number', 'tag_type', 'system1', 'io_type1', 'typical',
+    'tag_number', 'tag_type', 'system1', 'io_type1', 'syst_loc1', 'typical',
     'tag_serv', 'area_class', 'unit_name', 'design_by', 'status',
     'loop_name', 'plant_area', 'instr_type', 'instr_desc',
-    'area', 'cwa', 'ex_type', 'signal_type', 'io_type2', 'system2',
+    'area', 'cwa', 'ex_type', 'signal_type', 'io_type2', 'system2', 'syst_loc2',
     'fgs_via_system2',  # flag: True when FGS assignment is in System2
+    'fgs_interface',    # flag: True when both System1 and System2 are in FGS_SYSTEMS
 ]
 
 _COL_MAP = {
@@ -28,6 +53,7 @@ _COL_MAP = {
     'tag_type':    ('tag_type',),
     'system1':     ('system1',),
     'io_type1':    ('io_type1',),
+    'syst_loc1':   ('syst_loc1',),
     'typical':     ('typical',),
     'tag_serv':    ('tag_serv',),
     'area_class':  ('area_class',),
@@ -44,6 +70,7 @@ _COL_MAP = {
     'signal_type': ('signal_type',),
     'io_type2':    ('io_type2',),
     'system2':     ('system2',),
+    'syst_loc2':   ('syst_loc2',),
 }
 
 
@@ -143,6 +170,21 @@ def _mig_spi_unique_tags(db):
     db.execute("PRAGMA foreign_keys = ON")
 
 
+def _mig_spi_syst_loc(db):
+    """Add syst_loc1 and syst_loc2 columns for signal endpoint locations."""
+    db.execute("ALTER TABLE spi_tags ADD COLUMN syst_loc1 TEXT")
+    db.execute("ALTER TABLE spi_tags ADD COLUMN syst_loc2 TEXT")
+
+
+def _mig_spi_fgs_interface(db):
+    """Add fgs_interface column and backfill existing tags."""
+    db.execute("ALTER TABLE spi_tags ADD COLUMN fgs_interface INTEGER DEFAULT 0")
+    db.execute("""
+        UPDATE spi_tags SET fgs_interface = 1
+        WHERE system1 IN ('FGS','LFGS') AND system2 IN ('FGS','LFGS')
+    """)
+
+
 def _mig_spi_diffs_fk(db):
     """Add proper FK on spi_diffs.prev_import_id (SET NULL on delete)."""
     db.execute("PRAGMA foreign_keys = OFF")
@@ -214,6 +256,8 @@ def init_db():
     _run_migration(db, 'spi_unique_week_label',    _mig_spi_unique_week)
     _run_migration(db, 'spi_unique_tags_in_import', _mig_spi_unique_tags)
     _run_migration(db, 'spi_diffs_prev_fk',         _mig_spi_diffs_fk)
+    _run_migration(db, 'spi_syst_loc_cols',          _mig_spi_syst_loc)
+    _run_migration(db, 'spi_fgs_interface_col',      _mig_spi_fgs_interface)
     # Indexes last — recreated after any table migrations above
     db.executescript("""
         CREATE INDEX IF NOT EXISTS idx_spi_tags_import  ON spi_tags(import_id);
@@ -277,6 +321,7 @@ def parse_spi_excel(filepath):
 
         tag = {col: _val(row, col_idx.get(col)) for col in _COL_MAP}
         tag['fgs_via_system2'] = 1 if fgs_via_sys2 else 0
+        tag['fgs_interface']   = 1 if (sys1 in FGS_SYSTEMS and sys2 in FGS_SYSTEMS) else 0
 
         if tag['tag_number']:
             tag['tag_number'] = re.sub(r'\s+', ' ', tag['tag_number']).strip()
@@ -286,18 +331,34 @@ def parse_spi_excel(filepath):
     return tags, total
 
 
+# Fields scanned for TBF values — ordered by relevance for display
+TBF_FIELDS = [
+    ('typical',     'Typical'),
+    ('status',      'Status'),
+    ('io_type1',    'IO Type 1'),
+    ('io_type2',    'IO Type 2'),
+    ('instr_type',  'Instr Type'),
+    ('signal_type', 'Signal Type'),
+    ('ex_type',     'Ex Type'),
+    ('tag_type',    'Tag Type'),
+]
+
+
+def _tbf_fields(tag):
+    """Return list of (field_key, field_label) where the value is 'TBF'."""
+    return [(k, lbl) for k, lbl in TBF_FIELDS if tag.get(k) == 'TBF']
+
+
 def _compute_flags(tag):
     flags = []
     if not tag.get('typical'):
         flags.append('missing_typical')
-    if not tag.get('area_class'):
-        flags.append('missing_area_class')
-    if not tag.get('tag_type'):
-        flags.append('missing_tag_type')
-    if tag.get('status') == 'TBF':
-        flags.append('status_tbf')
     if tag.get('fgs_via_system2'):
         flags.append('via_system2')
+    if tag.get('fgs_interface'):
+        io1, io2 = tag.get('io_type1'), tag.get('io_type2')
+        if io1 and io2 and (io1, io2) not in _COMPLEMENTARY_IO:
+            flags.append('interface_io_error')
     return flags
 
 
@@ -313,14 +374,16 @@ def _duplicate_tag_numbers(db, import_id):
 
 _DIFF_FIELDS = [
     'typical', 'status', 'area_class',
-    'system1', 'io_type1', 'system2', 'io_type2',
+    'system1', 'io_type1', 'syst_loc1', 'system2', 'io_type2', 'syst_loc2',
     'design_by', 'loop_name', 'tag_serv',
 ]
 
 # Display-relevant fields stored on new/removed tag snapshots
 _DIFF_SNAPSHOT_FIELDS = [
-    'tag_number', 'loop_name', 'system1', 'io_type1',
-    'system2', 'io_type2', 'typical', 'tag_serv', 'area_class', 'design_by', 'status',
+    'tag_number', 'loop_name',
+    'system1', 'io_type1', 'syst_loc1',
+    'system2', 'io_type2', 'syst_loc2',
+    'typical', 'tag_serv', 'design_by', 'status',
 ]
 
 
@@ -614,12 +677,10 @@ def get_loops():
             typical = 'Mixed'
 
         warnings = []
-        if any(not t.get('typical') for t in loop_tags):
+        if 'missing_typical' in LOOP_WARNINGS and any(not t.get('typical') for t in loop_tags):
             warnings.append('missing_typical')
-        if len(unique_typ) > 1:
+        if 'inconsistent_typical' in LOOP_WARNINGS and len(unique_typ) > 1:
             warnings.append('inconsistent_typical')
-        if any(not t.get('area_class') for t in loop_tags):
-            warnings.append('missing_area_class')
 
         loops.append({
             'loop_name': loop_name or None,
@@ -645,4 +706,94 @@ def get_loops():
         'loop_count': len(loops),
         'tag_count': sum(l['tag_count'] for l in loops),
         'flag_summary': flag_summary,
+    })
+
+
+@bp.route('/api/spi/interfaces', methods=['GET'])
+def get_interfaces():
+    """Return all FGS-FGS interface tags (both System1 and System2 in FGS_SYSTEMS)."""
+    import_id = request.args.get('import_id')
+
+    db = get_db()
+    if not import_id:
+        latest = db.execute("SELECT id FROM spi_imports ORDER BY id DESC LIMIT 1").fetchone()
+        if not latest:
+            db.close()
+            return jsonify({'tags': [], 'import_id': None, 'count': 0, 'error_count': 0})
+        import_id = latest['id']
+
+    tags = [dict(r) for r in db.execute(
+        "SELECT * FROM spi_tags WHERE import_id=? AND fgs_interface=1 ORDER BY loop_name, tag_number",
+        (import_id,)
+    ).fetchall()]
+    db.close()
+
+    for t in tags:
+        t['flags'] = _compute_flags(t)
+
+    return jsonify({
+        'tags': tags,
+        'import_id': int(import_id),
+        'count': len(tags),
+        'error_count': sum(1 for t in tags if 'interface_io_error' in t.get('flags', [])),
+    })
+
+
+@bp.route('/api/spi/flag-config', methods=['GET'])
+def flag_config():
+    """Return the active flag and warning definitions so the frontend stays in sync."""
+    return jsonify({
+        'tag_flags':    TAG_FLAGS,
+        'loop_warnings': LOOP_WARNINGS,
+        'tbf_fields':   [{'key': k, 'label': lbl} for k, lbl in TBF_FIELDS],
+    })
+
+
+@bp.route('/api/spi/tbf', methods=['GET'])
+def get_tbf():
+    """Return all tags that have TBF in any monitored field, with per-tag breakdown."""
+    import_id  = request.args.get('import_id')
+    field_filter = request.args.get('field', '')  # e.g. 'typical' to filter to one field
+
+    db = get_db()
+    if not import_id:
+        latest = db.execute("SELECT id FROM spi_imports ORDER BY id DESC LIMIT 1").fetchone()
+        if not latest:
+            db.close()
+            return jsonify({'tags': [], 'import_id': None, 'count': 0, 'field_counts': {}})
+        import_id = latest['id']
+
+    # Build WHERE clause: any TBF_FIELDS column = 'TBF'
+    tbf_keys = [k for k, _ in TBF_FIELDS]
+    where = ' OR '.join(f"{k} = 'TBF'" for k in tbf_keys)
+    all_tags = [dict(r) for r in db.execute(
+        f"SELECT * FROM spi_tags WHERE import_id=? AND ({where}) ORDER BY loop_name, tag_number",
+        (import_id,)
+    ).fetchall()]
+    db.close()
+
+    # Annotate each tag with which fields are TBF
+    field_counts = {k: 0 for k, _ in TBF_FIELDS}
+    result = []
+    for t in all_tags:
+        tbf = _tbf_fields(t)
+        if not tbf:
+            continue
+        for k, _ in tbf:
+            field_counts[k] = field_counts.get(k, 0) + 1
+        if field_filter and field_filter not in [k for k, _ in tbf]:
+            continue
+        t['tbf_fields'] = [{'key': k, 'label': lbl} for k, lbl in tbf]
+        result.append(t)
+
+    # Remove zero-count entries and build label map for frontend
+    field_counts = {k: v for k, v in field_counts.items() if v > 0}
+    field_labels = {k: lbl for k, lbl in TBF_FIELDS if k in field_counts}
+
+    return jsonify({
+        'tags': result,
+        'import_id': int(import_id),
+        'count': len(result),
+        'field_counts': field_counts,
+        'field_labels': field_labels,
     })

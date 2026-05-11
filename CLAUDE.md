@@ -33,7 +33,7 @@ Confirmed fire in building → FACP sends signal to FGS controller → FGS enabl
 Every link in this chain must be traceable to a spec clause.
 
 ### SPI Data Limitation (important context)
-SPI exports are currently incomplete — data from HSED HOC and HSED BoOC is not yet fully reflected. Do not treat the SPI as a complete source of truth until this is resolved. The email tracker tool is being prioritised first for this reason.
+SPI exports are populated by BoOC — BoOC does the SPI import on HOC's behalf, so HOC tags appear under `design_by = BoOC`, not HOC. The absence of HOC in the `design_by` column is expected. The total F&G tag count is still growing week-on-week (W20: 415 FGS+LFGS vs expected ~2500); SPI population by BoOC is ongoing. Do not treat the SPI as a complete source of truth until tag counts stabilise.
 
 ---
 
@@ -237,7 +237,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 
 **SPI data reality (W18 analysis):**
 - 7,683 total rows in export — 198 are F&G (141 FGS + 57 LFGS)
-- Expected ~2500 F&G tags — gap is HOC data missing entirely (only BoOC + COC present)
+- Expected ~2500 F&G tags — gap is SPI population still in progress (BoOC populates on behalf of both BoOC and HOC; HOC does not import directly)
 - Tag_Type blank for all F&G tags — data quality issue
 - Key columns: Tag_Number, System1, IO_Type1, Typical, Tag_Serv, Area_Class, Unit_name, Design_By, Status
 - No Fire Zone or FGS Layout column in current export — deferred to M5
@@ -283,7 +283,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - Delta report shown after import, accessible from history
 - Highlight what changed since last week
 
-**M5 — Spec rule checks (deferred until data complete)** ← NEXT (waiting on HOC/BoOC data)
+**M5 — Spec rule checks (deferred until data complete)** ← NEXT (waiting on SPI population to stabilise; BoOC populates for both BoOC+HOC scope)
 - Detector type vs fire zone vs spec requirement (needs HOC data + Fire Zone field)
 - All FGS input tags have Typical populated
 - Traceable to spec clause
@@ -477,7 +477,7 @@ Fix: `sudo systemctl restart ollama`, then send a fresh query. Verify with `olla
 - [x] Tool 2 M2 — Loop register: `/api/spi/loops`, collapsible loop rows, inline tag sub-rows, loop-level warnings (missing typical, inconsistent typical, missing area class), Warnings-only filter; "View" in history goes to loop register
 - [x] Tool 5 M1–M7 — Email Tracker complete: import, action register, contacts, side panel, notes log, attachments, email memory RAG
 - [x] SPI parser: case-insensitive headers + alias lists (W19 lowercase headers + `Tag_Number`→`tag_no` rename broke W18 → W19 diff; verified 347 F&G tags found in both)
-- [ ] Tool 2 (SPI Consistency Checker) — waiting for complete SPI data from HSED HOC/BoOC
+- [ ] Tool 2 (SPI Consistency Checker) — waiting for SPI population to stabilise (BoOC populates for both BoOC+HOC scope; W20 at 415 F&G tags vs ~2500 expected)
 - [ ] Tool 3 (C&E vs Spec Checker) — waiting for first C&E draft
 - [ ] Tool 4 (Revision Delta Tracker) — not started
 - [x] Tool 8 M1–M5 (Document Submittal Register) — xml import, register view, week-over-week diff, watchlist (auto-seed from specs/), notification feed on Overview, file upload/link per document; `gaia_doc_files` table; `~/spec-qa/gaia_files/` storage

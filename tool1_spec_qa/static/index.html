@@ -275,7 +275,8 @@
     .flag-missing_area_class { background: #1a2020; color: #4ec9b0; }
     .flag-missing_tag_type  { background: #252515; color: #dcdcaa; }
     .flag-status_tbf        { background: #2a1515; color: #f44747; }
-    .flag-via_system2       { background: #1a1a30; color: #9b9bff; }
+    .flag-via_system2          { background: #1a1a30; color: #9b9bff; }
+    .flag-interface_io_error   { background: #3a1010; color: #f44747; }
     .flag-duplicate_tag     { background: #2a1a30; color: #c586c0; }
     .spi-flag-summary { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; background: #1e1e1e; border: 1px solid #2d2d2d; border-radius: 3px; margin-bottom: 14px; font-size: 0.8rem; }
     .spi-flag-summary .sfs-total { color: #858585; margin-right: 4px; }
@@ -300,6 +301,12 @@
     .loop-typical.mixed { color: #dcdcaa; font-style: italic; }
     .loop-tags-row { display: none; }
     .loop-tags-row.open { display: table-row; }
+    .iface-dir { font-family: Consolas, monospace; font-size: 0.82rem; white-space: nowrap; }
+    .iface-sys { color: #9cdcfe; }
+    .iface-io-out { color: #dcdcaa; }
+    .iface-io-in  { color: #4ec9b0; }
+    .iface-arrow  { color: #858585; margin: 0 5px; }
+    .iface-error  { color: #f44747; }
     .loop-tag-subtable { width: 100%; border-collapse: collapse; }
     .loop-tag-subtable th { text-align: left; padding: 5px 10px 5px 28px; color: #555; font-size: 0.75rem; font-weight: 600; border-bottom: 1px solid #2a2a2a; white-space: nowrap; }
     .loop-tag-subtable td { padding: 5px 10px; font-size: 0.79rem; border-bottom: 1px solid #252525; color: #a0a0a0; }
@@ -309,10 +316,13 @@
     .loop-warn { display: inline-block; background: #2e1e0a; border: 1px solid #5a3800; color: #dcdcaa; border-radius: 2px; font-size: 0.67rem; padding: 1px 6px; margin-right: 3px; white-space: nowrap; }
     .loop-warn.warn-inconsistent { background: #2a1200; border-color: #6b3800; color: #f4a460; }
     /* Diff panel */
-    .diff-section-title { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #858585; margin: 16px 0 8px; }
+    .diff-section-title { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #858585; margin: 16px 0 8px; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+    .diff-section-title:hover { opacity: 0.8; }
     .diff-section-title.added   { color: #4ec9b0; }
     .diff-section-title.removed { color: #f44747; }
     .diff-section-title.changed { color: #dcdcaa; }
+    .diff-section-body { display: none; }
+    .diff-section-body.open { display: block; }
     .diff-table { width: 100%; border-collapse: collapse; font-size: 0.81rem; margin-bottom: 4px; }
     .diff-table th { text-align: left; padding: 5px 10px; color: #555; font-weight: 600; border-bottom: 1px solid #2a2a2a; white-space: nowrap; }
     .diff-table td { padding: 5px 10px; border-bottom: 1px solid #252525; vertical-align: top; }
@@ -665,6 +675,8 @@
         <div class="sub-tab" onclick="showSpiTab('loops', this)">Loop Register</div>
         <div class="sub-tab" onclick="showSpiTab('register', this)">Tag Register</div>
         <div class="sub-tab" onclick="showSpiTab('flags', this)">Flags</div>
+        <div class="sub-tab" onclick="showSpiTab('interfaces', this)">FGS-FGS Interface</div>
+        <div class="sub-tab" onclick="showSpiTab('tbf', this)">TBF</div>
       </div>
 
       <!-- Import tab -->
@@ -783,13 +795,14 @@
             <table class="spi-tag-table">
               <thead>
                 <tr>
-                  <th>Tag Number</th><th>System</th><th>IO Type</th>
-                  <th>Typical</th><th>Service</th><th>Area Class</th>
-                  <th>Unit</th><th>Design By</th><th>Status</th><th>Flags</th>
+                  <th>Tag Number</th>
+                  <th>Sys1</th><th>IO1</th><th>Loc1</th>
+                  <th>Sys2</th><th>IO2</th><th>Loc2</th>
+                  <th>Typical</th><th>Service</th><th>Design By</th><th>Status</th><th>Flags</th>
                 </tr>
               </thead>
               <tbody id="spiTagBody">
-                <tr><td colspan="10" class="empty-row">Import an SPI file to populate the register.</td></tr>
+                <tr><td colspan="12" class="empty-row">Import an SPI file to populate the register.</td></tr>
               </tbody>
             </table>
           </div>
@@ -804,6 +817,10 @@
             <span id="spiFlagCount" style="font-size:0.78rem;color:#858585;"></span>
           </div>
           <div class="spi-filters">
+            <label>Flag Type</label>
+            <select class="filter-select" id="spiFlagFilterType" onchange="renderSpiFlagTable()">
+              <option value="">All flags</option>
+            </select>
             <label>System</label>
             <select class="filter-select" id="spiFlagFilterSystem" onchange="loadSpiFlags()">
               <option value="">All</option>
@@ -829,12 +846,77 @@
             <table class="spi-tag-table">
               <thead>
                 <tr>
-                  <th>Tag Number</th><th>Loop</th><th>System</th><th>IO Type</th>
-                  <th>Typical</th><th>Area Class</th><th>Design By</th><th>Status</th><th>Flags</th>
+                  <th>Tag Number</th><th>Loop</th>
+                  <th>Sys1</th><th>IO1</th><th>Loc1</th>
+                  <th>Sys2</th><th>IO2</th><th>Loc2</th>
+                  <th>Typical</th><th>Design By</th><th>Status</th><th>Flags</th>
                 </tr>
               </thead>
               <tbody id="spiFlagBody">
-                <tr><td colspan="9" class="empty-row">Import an SPI file to populate.</td></tr>
+                <tr><td colspan="8" class="empty-row">Import an SPI file to populate.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- FGS Interfaces tab -->
+      <div id="spi-tab-interfaces" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <h2>FGS-FGS Interface</h2>
+            <span id="spiIfaceCount" style="font-size:0.78rem;color:#858585;"></span>
+          </div>
+          <p style="font-size:0.8rem;color:#858585;margin:0 0 14px;">
+            Tags where both System1 and System2 are FGS/LFGS — cross-system wiring.
+            Arrow shows signal direction (sender → receiver). IO Mismatch flags cases where
+            both sides are inputs or both are outputs.
+          </p>
+          <div style="overflow-x:auto;">
+            <table class="spi-tag-table">
+              <thead>
+                <tr>
+                  <th>Tag Number</th><th>Loop</th>
+                  <th>Sys1</th><th>IO1</th><th>Loc1</th>
+                  <th>Sys2</th><th>IO2</th><th>Loc2</th>
+                  <th>Direction</th><th>Typical</th><th>Service</th><th>Design By</th><th>Flags</th>
+                </tr>
+              </thead>
+              <tbody id="spiIfaceBody">
+                <tr><td colspan="8" class="empty-row">Import an SPI file to populate.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TBF tab -->
+      <div id="spi-tab-tbf" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <h2>TBF Fields</h2>
+            <span id="spiTbfCount" style="font-size:0.78rem;color:#858585;"></span>
+          </div>
+          <p style="font-size:0.8rem;color:#858585;margin:0 0 14px;">
+            Tags where one or more fields carry a TBF value. Filter by field to isolate
+            what is pending a specific workshop or engineering deliverable.
+          </p>
+          <div class="spi-filters">
+            <label>Field</label>
+            <select class="filter-select" id="spiTbfFilterField" onchange="loadSpiTbf()">
+              <option value="">All fields</option>
+            </select>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="spi-tag-table">
+              <thead>
+                <tr>
+                  <th>Tag Number</th><th>Loop</th><th>System1</th><th>IO Type</th>
+                  <th>Service</th><th>TBF Fields</th>
+                </tr>
+              </thead>
+              <tbody id="spiTbfBody">
+                <tr><td colspan="6" class="empty-row">Import an SPI file to populate.</td></tr>
               </tbody>
             </table>
           </div>
@@ -1269,7 +1351,7 @@
       if (name === "specqa") { refreshSpecsQA(); refreshModels(); }
       if (name === "admin") populateDebugSpecSelect();
       if (name === "email") { /* register loads when its sub-tab is clicked */ }
-      if (name === "spi") loadSpiHistory();
+      if (name === "spi") { loadSpiConfig(); loadSpiHistory(); }
       if (name === "register") loadGaiaHistory();
     }
 
@@ -2543,9 +2625,66 @@
       document.querySelectorAll('#page-spi .sub-tab').forEach(t => t.classList.remove('active'));
       document.getElementById('spi-tab-' + name).style.display = 'block';
       tab.classList.add('active');
-      if (name === 'loops')    loadSpiLoops();
-      if (name === 'register') loadSpiTags();
-      if (name === 'flags')    loadSpiFlags();
+      if (name === 'loops')      loadSpiLoops();
+      if (name === 'register')   loadSpiTags();
+      if (name === 'flags')      loadSpiFlags();
+      if (name === 'interfaces') loadSpiInterfaces();
+      if (name === 'tbf')        loadSpiTbf();
+    }
+
+    function renderIfaceDir(sys1, io1, sys2, io2) {
+      if (!sys1 || !sys2 || !io1 || !io2) {
+        return `<span class="iface-sys">${sys1||'?'}</span> [${io1||'?'}] / <span class="iface-sys">${sys2||'?'}</span> [${io2||'?'}]`;
+      }
+      const outputs = new Set(['DO', 'AO']);
+      if (outputs.has(io1)) {
+        // sys1 sends → sys2 receives
+        return `<span class="iface-dir"><span class="iface-sys">${sys1}</span> <span class="iface-io-out">[${io1}]</span><span class="iface-arrow">→</span><span class="iface-sys">${sys2}</span> <span class="iface-io-in">[${io2}]</span></span>`;
+      } else if (outputs.has(io2)) {
+        // sys2 sends → sys1 receives
+        return `<span class="iface-dir"><span class="iface-sys">${sys2}</span> <span class="iface-io-out">[${io2}]</span><span class="iface-arrow">→</span><span class="iface-sys">${sys1}</span> <span class="iface-io-in">[${io1}]</span></span>`;
+      }
+      // Both inputs or both outputs — error
+      return `<span class="iface-dir iface-error">${sys1} [${io1}] ⚡ ${sys2} [${io2}]</span>`;
+    }
+
+    async function loadSpiInterfaces(importId) {
+      if (importId) _spiCurrentImportId = importId;
+      let url = '/api/spi/interfaces?';
+      if (_spiCurrentImportId) url += 'import_id=' + _spiCurrentImportId + '&';
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      const errCount = data.error_count || 0;
+      document.getElementById('spiIfaceCount').textContent =
+        data.count + ' interface tag' + (data.count !== 1 ? 's' : '') +
+        (errCount > 0 ? ` · ${errCount} IO mismatch` : ' · no IO errors');
+      document.getElementById('spiIfaceCount').style.color = errCount > 0 ? '#f44747' : '#4ec9b0';
+
+      const tbody = document.getElementById('spiIfaceBody');
+      if (!data.tags || !data.tags.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-row">No FGS–FGS interface tags found.</td></tr>'; return;
+      }
+      tbody.innerHTML = data.tags.map(t => {
+        const flags = (t.flags || []).map(f =>
+          `<span class="flag-badge flag-${f}">${_FLAG_LABELS[f]||f}</span>`).join('');
+        return `<tr>
+          <td style="color:#9cdcfe;font-family:Consolas,monospace;white-space:nowrap;">${t.tag_number||'—'}</td>
+          <td style="color:#858585;font-family:Consolas,monospace;font-size:0.79rem;white-space:nowrap;">${t.loop_name||'—'}</td>
+          <td>${t.system1||'—'}</td>
+          <td>${t.io_type1||'—'}</td>
+          <td style="color:#858585;font-size:0.78rem;white-space:nowrap;">${t.syst_loc1||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td>${t.system2||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td>${t.io_type2||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td style="color:#858585;font-size:0.78rem;white-space:nowrap;">${t.syst_loc2||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td>${renderIfaceDir(t.system1, t.io_type1, t.system2, t.io_type2)}</td>
+          <td>${t.typical||'<span style="color:#555">—</span>'}</td>
+          <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
+          <td>${t.design_by||'—'}</td>
+          <td>${flags||'<span style="color:#3c3c3c">—</span>'}</td>
+        </tr>`;
+      }).join('');
     }
 
     function setupSpiDropZone() {
@@ -2560,11 +2699,30 @@
       });
     }
 
-    const _FLAG_LABELS = {
-      missing_typical: 'No Typical', missing_area_class: 'No Area Class',
-      missing_tag_type: 'No Tag Type', status_tbf: 'TBF', via_system2: 'via Sys2',
-      duplicate_tag: 'Duplicate',
-    };
+    // Populated from /api/spi/flag-config — do not hardcode here
+    let _FLAG_LABELS = {};
+    let _LOOP_WARN_LABELS = {};
+    async function loadSpiConfig() {
+      try {
+        const res = await fetch('/api/spi/flag-config');
+        const cfg = await res.json();
+        _FLAG_LABELS      = cfg.tag_flags     || {};
+        _LOOP_WARN_LABELS = cfg.loop_warnings  || {};
+        // Populate the Flags tab flag-type dropdown from the live config
+        const sel = document.getElementById('spiTbfFilterField');
+        const flagSel = document.getElementById('spiFlagFilterType');
+        if (flagSel) {
+          const prev = flagSel.value;
+          flagSel.innerHTML = '<option value="">All flags</option>';
+          Object.entries(_FLAG_LABELS).forEach(([k, lbl]) => {
+            const opt = document.createElement('option');
+            opt.value = k; opt.textContent = lbl;
+            if (k === prev) opt.selected = true;
+            flagSel.appendChild(opt);
+          });
+        }
+      } catch(e) { /* non-fatal: labels fall back to raw keys */ }
+    }
 
     async function uploadSpi(file) {
       if (!file.name.toLowerCase().endsWith('.xlsx')) {
@@ -2725,12 +2883,25 @@
           <span class="diff-stat removed">−${dd.removed_count} removed tags</span>
           <span class="diff-stat changed">~${dd.changed_count} changed fields</span>
         </p>
-        <div class="diff-section-title added">▸ New tags (${dd.new_count})</div>
-        ${renderTable(dd.new, 'added')}
-        <div class="diff-section-title removed">▸ Removed tags (${dd.removed_count})</div>
-        ${renderTable(dd.removed, 'removed')}
-        <div class="diff-section-title changed">▸ Changed fields (${dd.changed_count})</div>
-        ${changedTable}`;
+        <div class="diff-section-title added" onclick="toggleDiffSection('diff-new', this)">
+          <span class="diff-chevron">▸</span> New tags (${dd.new_count})
+        </div>
+        <div class="diff-section-body" id="diff-new">${renderTable(dd.new, 'added')}</div>
+        <div class="diff-section-title removed" onclick="toggleDiffSection('diff-removed', this)">
+          <span class="diff-chevron">▸</span> Removed tags (${dd.removed_count})
+        </div>
+        <div class="diff-section-body" id="diff-removed">${renderTable(dd.removed, 'removed')}</div>
+        <div class="diff-section-title changed" onclick="toggleDiffSection('diff-changed', this)">
+          <span class="diff-chevron">▸</span> Changed fields (${dd.changed_count})
+        </div>
+        <div class="diff-section-body" id="diff-changed">${changedTable}</div>`;
+    }
+
+    function toggleDiffSection(id, titleEl) {
+      const body = document.getElementById(id);
+      const chevron = titleEl.querySelector('.diff-chevron');
+      const open = body.classList.toggle('open');
+      chevron.textContent = open ? '▾' : '▸';
     }
 
     async function loadSpiTags(importId) {
@@ -2762,10 +2933,12 @@
           <td style="color:#9cdcfe;font-family:Consolas,monospace;white-space:nowrap;">${t.tag_number||'—'}</td>
           <td>${t.system1||'—'}</td>
           <td>${t.io_type1||'—'}</td>
+          <td style="color:#858585;font-size:0.78rem;white-space:nowrap;">${t.syst_loc1||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td>${t.system2||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td>${t.io_type2||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td style="color:#858585;font-size:0.78rem;white-space:nowrap;">${t.syst_loc2||'<span style="color:#3c3c3c">—</span>'}</td>
           <td>${t.typical||'<span style="color:#555">—</span>'}</td>
-          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
-          <td>${t.area_class||'<span style="color:#555">—</span>'}</td>
-          <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.unit_name||'—'}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
           <td>${t.design_by||'—'}</td>
           <td>${t.status||'—'}</td>
           <td>${flags||'<span style="color:#3c3c3c">—</span>'}</td>
@@ -2778,11 +2951,6 @@
       document.getElementById('spi-tab-register').style.display = 'block';
     }
 
-    const _LOOP_WARN_LABELS = {
-      missing_typical: 'No Typical',
-      inconsistent_typical: 'Inconsistent Typical',
-      missing_area_class: 'No Area Class',
-    };
 
     async function loadSpiLoops(importId) {
       if (importId) _spiCurrentImportId = importId;
@@ -2836,10 +3004,11 @@
               <td>${t.tag_number||'—'}</td>
               <td>${t.system1||'—'}</td>
               <td>${t.io_type1||'—'}</td>
+              <td style="color:#858585;font-size:0.78rem;white-space:nowrap;">${t.syst_loc1||'<span style="color:#3c3c3c">—</span>'}</td>
               <td>${t.system2||'<span style="color:#3c3c3c">—</span>'}</td>
               <td>${t.io_type2||'<span style="color:#3c3c3c">—</span>'}</td>
-              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
-              <td>${t.area_class||'<span style="color:#555">—</span>'}</td>
+              <td style="color:#858585;font-size:0.78rem;white-space:nowrap;">${t.syst_loc2||'<span style="color:#3c3c3c">—</span>'}</td>
+              <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
               <td>${t.design_by||'—'}</td>
               <td>${t.status||'—'}</td>
               <td>${flags||'<span style="color:#3c3c3c">—</span>'}</td>
@@ -2856,8 +3025,10 @@
               <td colspan="5" style="padding:0;background:#1c1e1f;">
                 <table class="loop-tag-subtable">
                   <thead><tr>
-                    <th>Tag Number</th><th>Sys1</th><th>IO1</th><th>Sys2</th><th>IO2</th>
-                    <th>Service</th><th>Area Class</th><th>Design By</th><th>Status</th><th>Flags</th>
+                    <th>Tag Number</th>
+                    <th>Sys1</th><th>IO1</th><th>Loc1</th>
+                    <th>Sys2</th><th>IO2</th><th>Loc2</th>
+                    <th>Service</th><th>Design By</th><th>Status</th><th>Flags</th>
                   </tr></thead>
                   <tbody>${tagRows}</tbody>
                 </table>
@@ -2882,6 +3053,88 @@
       loopRow.classList.toggle('open', !isOpen);
     }
 
+    async function loadSpiTbf(importId) {
+      if (importId) _spiCurrentImportId = importId;
+      const field = document.getElementById('spiTbfFilterField').value;
+
+      let url = '/api/spi/tbf?';
+      if (_spiCurrentImportId) url += 'import_id=' + _spiCurrentImportId + '&';
+      if (field) url += 'field=' + encodeURIComponent(field) + '&';
+
+      const res = await fetch(url);
+      const data = await res.json();
+
+      // Rebuild field filter options from what's actually TBF in this import
+      const sel = document.getElementById('spiTbfFilterField');
+      const prev = sel.value;
+      sel.innerHTML = '<option value="">All fields</option>';
+      if (data.field_labels) {
+        Object.entries(data.field_labels).forEach(([k, lbl]) => {
+          const cnt = data.field_counts[k] || 0;
+          const opt = document.createElement('option');
+          opt.value = k; opt.textContent = `${lbl} (${cnt})`;
+          if (k === prev) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      }
+
+      document.getElementById('spiTbfCount').textContent = data.count + ' tag' + (data.count !== 1 ? 's' : '') + ' with TBF fields';
+
+      const tbody = document.getElementById('spiTbfBody');
+      if (!data.tags || !data.tags.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No TBF fields found.</td></tr>'; return;
+      }
+      tbody.innerHTML = data.tags.map(t => {
+        const tbfBadges = (t.tbf_fields || []).map(f =>
+          `<span class="flag-badge" style="background:#2a1f10;color:#dcdcaa;">${f.label}</span>`
+        ).join('');
+        return `<tr>
+          <td style="color:#9cdcfe;font-family:Consolas,monospace;white-space:nowrap;">${t.tag_number||'—'}</td>
+          <td style="color:#858585;font-family:Consolas,monospace;font-size:0.79rem;white-space:nowrap;">${t.loop_name||'—'}</td>
+          <td>${t.system1||'—'}</td>
+          <td>${t.io_type1||'—'}</td>
+          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(t.tag_serv||'').replace(/"/g,"'")}">${t.tag_serv||'—'}</td>
+          <td>${tbfBadges}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    let _spiFlaggedTags = [];
+
+    function renderSpiFlagTable() {
+      const flagType = document.getElementById('spiFlagFilterType').value;
+      const visible  = flagType
+        ? _spiFlaggedTags.filter(t => (t.flags || []).includes(flagType))
+        : _spiFlaggedTags;
+
+      document.getElementById('spiFlagCount').textContent =
+        visible.length + ' flagged tag' + (visible.length !== 1 ? 's' : '') +
+        (flagType ? ` · ${_FLAG_LABELS[flagType] || flagType}` : '');
+
+      const tbody = document.getElementById('spiFlagBody');
+      if (!visible.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-row">No flagged tags found.</td></tr>'; return;
+      }
+      tbody.innerHTML = visible.map(t => {
+        const flags = (t.flags || []).map(f =>
+          `<span class="flag-badge flag-${f}">${_FLAG_LABELS[f]||f}</span>`).join('');
+        return `<tr>
+          <td style="color:#9cdcfe;font-family:Consolas,monospace;white-space:nowrap;">${t.tag_number||'—'}</td>
+          <td style="color:#858585;font-family:Consolas,monospace;font-size:0.79rem;white-space:nowrap;">${t.loop_name||'—'}</td>
+          <td>${t.system1||'—'}</td>
+          <td>${t.io_type1||'—'}</td>
+          <td style="color:#858585;font-size:0.78rem;white-space:nowrap;">${t.syst_loc1||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td>${t.system2||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td>${t.io_type2||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td style="color:#858585;font-size:0.78rem;white-space:nowrap;">${t.syst_loc2||'<span style="color:#3c3c3c">—</span>'}</td>
+          <td>${t.typical||'<span style="color:#555">—</span>'}</td>
+          <td>${t.design_by||'—'}</td>
+          <td>${t.status||'—'}</td>
+          <td>${flags}</td>
+        </tr>`;
+      }).join('');
+    }
+
     async function loadSpiFlags(importId) {
       if (importId) _spiCurrentImportId = importId;
       const system1   = document.getElementById('spiFlagFilterSystem').value;
@@ -2896,28 +3149,8 @@
 
       const res = await fetch(url);
       const data = await res.json();
-      document.getElementById('spiFlagCount').textContent = data.count + ' flagged tags';
-
-      const tbody = document.getElementById('spiFlagBody');
-      if (!data.tags || !data.tags.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-row">No flagged tags found.</td></tr>';
-      } else {
-        tbody.innerHTML = data.tags.map(t => {
-          const flags = (t.flags || []).map(f =>
-            `<span class="flag-badge flag-${f}">${_FLAG_LABELS[f]||f}</span>`).join('');
-          return `<tr>
-            <td style="color:#9cdcfe;font-family:Consolas,monospace;white-space:nowrap;">${t.tag_number||'—'}</td>
-            <td style="color:#858585;font-family:Consolas,monospace;font-size:0.79rem;white-space:nowrap;">${t.loop_name||'—'}</td>
-            <td>${t.system1||'—'}</td>
-            <td>${t.io_type1||'—'}</td>
-            <td>${t.typical||'<span style="color:#555">—</span>'}</td>
-            <td>${t.area_class||'<span style="color:#555">—</span>'}</td>
-            <td>${t.design_by||'—'}</td>
-            <td>${t.status||'—'}</td>
-            <td>${flags}</td>
-          </tr>`;
-        }).join('');
-      }
+      _spiFlaggedTags = data.tags || [];
+      renderSpiFlagTable();
 
       // Switch to flags tab
       document.querySelectorAll('#page-spi .sub-tab').forEach((t,i) => t.classList.toggle('active', i===3));
