@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Context
 
-Greenfield LNG facility EPC project. The owner of this repo is a **control systems engineer** responsible for the **Fire & Gas (F&G) scope**, working as part of the EPC contractor team. The client (Owner) submits deliverables for review; HSED is the internal department that owns Fire & Safety design and provides the governing specifications.
+Greenfield LNG facility EPC project. The owner of this repo is a control systems engineer in the **ICSS** department (Instrumentation Control Systems, also called I&C), responsible for the **Fire & Gas (F&G) scope** within ICSS. Works as part of the EPC contractor team. The client (Owner) reviews submitted deliverables. **HSED** (HSE Design) is a **separate department** — not part of ICSS — that owns Fire & Safety design and issues the governing specifications; ICSS depends on HSED for those specs and implements them.
 
 The goal of this project is to build AI-assisted tools that automate verification, cross-checking, and consistency work that is currently done manually across large documents and datasets.
 
@@ -21,7 +21,8 @@ The goal of this project is to build AI-assisted tools that automate verificatio
 - Project specs always take precedence; every check must be traceable to a spec clause
 
 ### Key Interfaces
-- **HSED** → provides governing specs and FGS layouts; defines interfaces with PA/GA, HVAC, FACP
+- **ICSS / I&C** — user's home department (Instrumentation Control Systems); receives HSED specs and implements F&G in the FGS controller, SIS, alarms, detectors
+- **HSED** (separate department) → provides governing specs and FGS layouts; defines interfaces with PA/GA, HVAC, FACP
   - HSED is split across **HOC** (Houston Operating Center) and **BoOC** (Bogota Operational Center)
 - **PA/GA** — Public Address / General Alarm system
 - **HVAC** — interfaces triggered by F&G detection events
@@ -391,6 +392,7 @@ All tools will live under a **single Flask app** (port 5000 on `fgstools` LXC) w
 - **Deadline digest** — "this week / overdue" widget on the Overview tab surfacing action items by due date; built on existing action_items table; requires no new data, just a view
 - **Comment response tracker** — per document revision, log client review comments with status (open / responded / accepted / rejected); ties into GAIA register (new IFR submission opens a comment log); tracks formal audit trail for document review cycle
 - **Technical Query (TQ) register** — dedicated register for TQs between contractor and client; fields: TQ number, subject, originator, linked spec clause, status, linked email; email tracker already captures TQs as a category — this promotes them to a first-class register
+- **FERC compliance tracker** — register of the 120+ Environmental Conditions from the CWLNG FERC Authorization Order (Natural Gas Act §3 & §7); each condition stored as a row with text, category (environmental / safety / reporting / construction), responsible party, evidence-required, due milestone, and status (open / in-progress / submitted / accepted / closed); input is the Authorization Order PDF (one-time parse via pdfplumber to seed the register, then manual edits); links to GAIA docs (Tool 8) for evidence submittals and to action items (Tool 5) for owner follow-ups; Overview KPI card surfacing overdue / upcoming conditions; non-negotiable scope — missing a FERC condition is a regulatory failure, not a doc-control issue
 - **Spec clause reverse lookup** ✅ DONE — keyword/tag search (`GET /api/search?q=`) returning all chunks that contain the term; sub-tab "Clause Search" in Spec Q&A; results with highlighted terms, TABLE badge, clickable PDF page links; no LLM, near-instant
 - **Weekly summary generator** — auto-generated one-page digest: open actions, overdue items, new document releases, new emails from past 7 days; all data already in SQLite, mostly a reporting query; useful for personal review and team status updates
 
